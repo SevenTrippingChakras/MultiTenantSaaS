@@ -1,0 +1,20 @@
+# Runs the containerized backend + frontend together.
+# MongoDB stays on Atlas (managed), reached via the backend's .env connection string.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the bundle; the browser calls the published backend port.
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend

@@ -1,0 +1,235 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Cozy pixel-RPG night forest: moonlit greens, warm campfire, fireflies. */
+:root {
+  --radius: 1rem;
+
+  --night: #0a1a1e;
+  --forest: #123028;
+  --moss: #6fd88a;
+  --ember: #ff8c3a;
+  --flame-y: #ffd24a;
+  --cream: #f3ecd8;
+  --bark: #4a3324;
+  --ink: #060f0d;
+
+  --background: var(--night);
+  --foreground: #eaf3ee;
+
+  --card: #102a26;
+  --card-foreground: #eaf3ee;
+
+  --popover: #102a26;
+  --popover-foreground: #eaf3ee;
+
+  --primary: var(--ember);
+  --primary-foreground: #2a1400;
+
+  --secondary: #163a30;
+  --secondary-foreground: #eaf3ee;
+
+  --muted: #163a30;
+  --muted-foreground: #9ec4b0;
+
+  --accent: var(--moss);
+  --accent-foreground: #06120e;
+
+  --destructive: #ff6b5d;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.18);
+  --ring: var(--moss);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-night: var(--night);
+  --color-forest: var(--forest);
+  --color-moss: var(--moss);
+  --color-ember: var(--ember);
+  --color-flame-y: var(--flame-y);
+  --color-cream: var(--cream);
+  --color-bark: var(--bark);
+  --color-ink: var(--ink);
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+  --font-space: "Space Grotesk", system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    color: var(--foreground);
+    overflow: hidden;
+    font-family: var(--font-space);
+    background-color: var(--night);
+  }
+}
+
+/* --- Pixel-art scene background + readability veil --- */
+.scene-img {
+  position: absolute;
+  inset: 0;
+  background: #0a1620 url("/forest.jpg") center / auto 260% no-repeat;
+}
+.scene-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 100% at 50% 38%, transparent 66%, rgba(4, 12, 10, 0.45));
+}
+
+/* Floating light particles over the real art. */
+.fly {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #e0ff9a;
+  box-shadow: 0 0 8px 2px rgba(217, 255, 136, 0.7);
+}
+.spark {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: #ffb060;
+  box-shadow: 0 0 8px 2px rgba(255, 150, 60, 0.7);
+}
+
+/* --- Glass panel (warm-cool night glass) --- */
+.glass {
+  background: rgba(9, 22, 19, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 40px rgba(2, 10, 8, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* --- Scrollbars --- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(111, 216, 138, 0.5) transparent;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(111, 216, 138, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(111, 216, 138, 0.7); }
+
+/* --- Speech-bubble tails (AI = mossy glass, player = ember) --- */
+.bubble-l::before,
+.bubble-r::before {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  top: 16px;
+  transform: rotate(45deg);
+}
+.bubble-l::before {
+  left: -7px;
+  background: #17403a;
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+}
+.bubble-r::before {
+  right: -7px;
+  background: var(--ember);
+}
+
+/* --- Scene animations --- */
+.svg-anim { transform-box: fill-box; transform-origin: center; }
+
+@keyframes flicker {
+  0%, 100% { transform: scaleY(1) scaleX(1); opacity: 0.95; }
+  40% { transform: scaleY(0.82) scaleX(1.1); opacity: 1; }
+  70% { transform: scaleY(1.06) scaleX(0.95); opacity: 0.9; }
+}
+.flame { transform-box: fill-box; transform-origin: bottom center; animation: flicker 0.28s ease-in-out infinite; }
+.flame-2 { transform-box: fill-box; transform-origin: bottom center; animation: flicker 0.4s ease-in-out infinite reverse; }
+
+@keyframes ray-shimmer {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.22; }
+}
+.ray { animation: ray-shimmer 6s ease-in-out infinite; }
+
+@keyframes fog-drift {
+  from { transform: translateX(-24px); }
+  to { transform: translateX(24px); }
+}
+.fog { animation: fog-drift 18s ease-in-out infinite alternate; transform-box: fill-box; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+.twinkle-a { animation: twinkle 3.5s ease-in-out infinite; }
+.twinkle-b { animation: twinkle 5s ease-in-out infinite; }
+
+@keyframes ember-rise {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-150px) scale(0.3); opacity: 0; }
+}
+.ember { transform-box: fill-box; animation: ember-rise 3s ease-in infinite; }
+
+@keyframes firefly {
+  0% { transform: translate(0, 0); opacity: 0.2; }
+  25% { opacity: 1; }
+  50% { transform: translate(22px, -18px); opacity: 0.6; }
+  75% { opacity: 1; }
+  100% { transform: translate(-12px, -34px); opacity: 0.2; }
+}
+.firefly { transform-box: fill-box; animation: firefly 7s ease-in-out infinite; }
+
+/* --- UI animations --- */
+@keyframes pop-in {
+  0% { opacity: 0; transform: translateY(10px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-pop-in { animation: pop-in 0.24s cubic-bezier(0.34, 1.4, 0.5, 1); }
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.float-y { animation: float-y 3.5s ease-in-out infinite; }
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.6); opacity: 0.5; }
+}
+.pulse-dot { animation: pulse-dot 1.1s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flame, .flame-2, .ray, .fog, .twinkle-a, .twinkle-b,
+  .ember, .firefly, .animate-pop-in, .float-y, .pulse-dot {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,33 @@
+# Environment
+.env
+*.env
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Local tooling / private planning (not for the repo)
+.claude/
+backend/planning/
+backend/knowledge/
+
+# TypeScript build cache
+*.tsbuildinfo
