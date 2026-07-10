@@ -1,5 +1,3 @@
-"""Application settings, loaded once from environment / .env file."""
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

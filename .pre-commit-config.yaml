@@ -1,0 +1,28 @@
+# Backend lives in backend/ (uv-managed). Hooks cd there and use `uv run`, so
+# they share the exact venv + config (pyproject.toml) as manual runs.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: ruff lint
+        entry: bash -c 'cd backend && uv run ruff check --fix .'
+        language: system
+        types: [python]
+        files: ^backend/
+        pass_filenames: false
+
+      - id: ruff-format
+        name: ruff format
+        entry: bash -c 'cd backend && uv run ruff format .'
+        language: system
+        types: [python]
+        files: ^backend/
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy
+        entry: bash -c 'cd backend && uv run mypy app'
+        language: system
+        types: [python]
+        files: ^backend/
+        pass_filenames: false

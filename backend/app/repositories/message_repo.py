@@ -1,6 +1,4 @@
-"""Data access for the messages collection."""
-
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from bson import ObjectId
 
@@ -14,7 +12,7 @@ async def insert(
         "session_id": session_id,
         "role": role,
         "content": content,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
         "metadata": metadata or {},
     }
     result = await get_db().messages.insert_one(doc)
@@ -25,7 +23,8 @@ async def insert(
 async def list_by_session(session_id: ObjectId, limit: int = 200) -> list[dict]:
     """Return up to `limit` most recent messages, in chronological order."""
     cursor = (
-        get_db().messages.find({"session_id": session_id})
+        get_db()
+        .messages.find({"session_id": session_id})
         .sort("created_at", -1)
         .limit(limit)
     )

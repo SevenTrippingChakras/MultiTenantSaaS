@@ -1,6 +1,4 @@
-"""Data access for the sessions collection."""
-
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -17,7 +15,7 @@ def _to_oid(value: str) -> ObjectId | None:
 
 
 async def insert(user_id: ObjectId, title: str) -> dict:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     doc = {"user_id": user_id, "title": title, "created_at": now, "updated_at": now}
     result = await get_db().sessions.insert_one(doc)
     doc["_id"] = result.inserted_id
@@ -45,11 +43,9 @@ async def delete(session_id: str) -> None:
 async def touch(session_id: ObjectId) -> None:
     """Bump updated_at so the session rises to the top of the list."""
     await get_db().sessions.update_one(
-        {"_id": session_id}, {"$set": {"updated_at": datetime.now(timezone.utc)}}
+        {"_id": session_id}, {"$set": {"updated_at": datetime.now(UTC)}}
     )
 
 
 async def set_title(session_id: ObjectId, title: str) -> None:
-    await get_db().sessions.update_one(
-        {"_id": session_id}, {"$set": {"title": title}}
-    )
+    await get_db().sessions.update_one({"_id": session_id}, {"$set": {"title": title}})

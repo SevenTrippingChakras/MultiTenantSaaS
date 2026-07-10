@@ -1,6 +1,7 @@
-"""Chat flow: persist the user message, stream the LLM reply, persist it."""
+from typing import cast
 
 from bson import ObjectId
+from openai.types.chat import ChatCompletionMessageParam
 
 from app import llm
 from app.config import settings
@@ -8,7 +9,6 @@ from app.repositories import message_repo, session_repo
 
 # Cap how many past messages we replay to the LLM (controls token cost).
 MAX_CONTEXT_MESSAGES = 20
-# Longest auto-generated session title, in characters.
 TITLE_MAX_LEN = 50
 
 
@@ -24,10 +24,15 @@ async def stream(sid: ObjectId, content: str):
     if len(history) == 1:  # first message -> use it as the session title
         await session_repo.set_title(sid, content[:TITLE_MAX_LEN])
 
-    prompt = [
-        {"role": m["role"], "content": m["content"]}
-        for m in history[-MAX_CONTEXT_MESSAGES:]
-    ]
+    # Roles/content come from Mongo (typed Any); we trust they are valid chat
+    # turns, so cast to OpenAI's message-param type at this boundary.
+    prompt = cast(
+        list[ChatCompletionMessageParam],
+        [
+            {"role": m["role"], "content": m["content"]}
+            for m in history[-MAX_CONTEXT_MESSAGES:]
+        ],
+    )
 
     chunks: list[str] = []
     try:

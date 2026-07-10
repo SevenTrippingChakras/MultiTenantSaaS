@@ -13,3 +13,35 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "python-jose[cryptography]>=3.5.0",
 ]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.2.0",
+    "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.15.21",
+]
+
+[tool.pytest.ini_options]
+# asyncio_mode=auto: plain `async def test_*` run without an explicit marker.
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+# Third-party libs (motor, jose, bcrypt) ship no type stubs; don't fail on them.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, UP pyupgrade, B bugbear.
+# No bugbear (B008) exemption for FastAPI markers: we use the Annotated idiom
+# (`user: CurrentUser`) everywhere, so B008 guards against regressing to
+# `= Depends(...)` defaults.
+select = ["E", "W", "F", "I", "UP", "B"]

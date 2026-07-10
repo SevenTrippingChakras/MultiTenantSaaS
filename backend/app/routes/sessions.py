@@ -1,8 +1,6 @@
-"""Session HTTP routes. All scoped to the authenticated user."""
+from fastapi import APIRouter, status
 
-from fastapi import APIRouter, Depends, status
-
-from app.core.deps import get_current_user
+from app.core.deps import CurrentUser
 from app.models.message import MessageOut
 from app.models.message import to_out as message_to_out
 from app.models.session import SessionCreate, SessionOut
@@ -21,13 +19,13 @@ def _to_out(doc: dict) -> dict:
 
 
 @router.post("", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
-async def create_session(data: SessionCreate, user: dict = Depends(get_current_user)):
+async def create_session(data: SessionCreate, user: CurrentUser):
     doc = await session_service.create(user["_id"], data.title)
     return _to_out(doc)
 
 
 @router.get("", response_model=list[SessionOut])
-async def list_sessions(user: dict = Depends(get_current_user)):
+async def list_sessions(user: CurrentUser):
     docs = await session_service.list_for_user(user["_id"])
     return [_to_out(d) for d in docs]
 
@@ -35,13 +33,13 @@ async def list_sessions(user: dict = Depends(get_current_user)):
 @router.get("/{session_id}/messages", response_model=list[MessageOut])
 async def get_messages(
     session_id: str,
+    user: CurrentUser,
     limit: int = 200,
-    user: dict = Depends(get_current_user),
 ):
     docs = await session_service.list_messages(session_id, user["_id"], limit)
     return [message_to_out(d) for d in docs]
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_session(session_id: str, user: dict = Depends(get_current_user)):
+async def delete_session(session_id: str, user: CurrentUser):
     await session_service.delete(session_id, user["_id"])
