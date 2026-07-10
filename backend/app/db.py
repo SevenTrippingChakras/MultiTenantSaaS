@@ -1,5 +1,3 @@
-"""MongoDB connection (Motor async client) and index setup."""
-
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.config import settings

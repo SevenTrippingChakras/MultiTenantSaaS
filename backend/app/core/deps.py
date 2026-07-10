@@ -1,4 +1,4 @@
-"""Shared route dependencies, e.g. resolving the current authenticated user."""
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -10,7 +10,7 @@ bearer = HTTPBearer()
 
 
 async def get_current_user(
-    cred: HTTPAuthorizationCredentials = Depends(bearer),
+    cred: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
 ) -> dict:
     """Resolve the user from the Bearer token, or 401."""
     user_id = security.decode_token(cred.credentials)
@@ -24,3 +24,6 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
     return user
+
+
+CurrentUser = Annotated[dict, Depends(get_current_user)]

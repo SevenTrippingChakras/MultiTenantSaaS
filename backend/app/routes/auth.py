@@ -1,8 +1,6 @@
-"""Auth HTTP routes. Parse request, call service, return response."""
+from fastapi import APIRouter, status
 
-from fastapi import APIRouter, Depends, status
-
-from app.core.deps import get_current_user
+from app.core.deps import CurrentUser
 from app.models.user import TokenOut, UserLogin, UserOut, UserRegister
 from app.services import auth_service
 
@@ -21,7 +19,7 @@ async def login(data: UserLogin):
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: dict = Depends(get_current_user)):
+async def me(user: CurrentUser):
     return {
         "id": str(user["_id"]),
         "email": user["email"],

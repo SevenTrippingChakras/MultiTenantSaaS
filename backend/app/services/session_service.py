@@ -1,5 +1,3 @@
-"""Session business logic. Enforces that users only touch their own sessions."""
-
 from bson import ObjectId
 from fastapi import HTTPException, status
 

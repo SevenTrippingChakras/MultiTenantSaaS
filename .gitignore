@@ -26,6 +26,7 @@ build/
 
 # Local tooling / private planning (not for the repo)
 .claude/
+.vscode/
 backend/planning/
 backend/knowledge/
 

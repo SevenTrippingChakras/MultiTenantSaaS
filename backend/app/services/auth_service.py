@@ -1,6 +1,4 @@
-"""Auth business logic: register and login. No DB or HTTP-framework code here."""
-
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 
@@ -18,7 +16,7 @@ async def register(data: UserRegister) -> dict:
     doc = {
         "email": data.email,
         "password_hash": security.hash_password(data.password),
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
     user_id = await user_repo.insert(doc)
     return {"id": user_id, "email": data.email, "created_at": doc["created_at"]}

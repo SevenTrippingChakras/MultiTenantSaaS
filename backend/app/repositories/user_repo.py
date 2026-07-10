@@ -1,5 +1,3 @@
-"""Data access for the users collection. The only layer that touches Mongo."""
-
 from bson import ObjectId
 
 from app.db import get_db
