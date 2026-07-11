@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     jwt_secret: str = "dev-secret-change-me"
     jwt_expire_min: int = 60
+    log_level: str = "INFO"
 
 
 settings = Settings()
