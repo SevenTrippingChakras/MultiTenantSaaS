@@ -1,8 +1,7 @@
 from datetime import UTC, datetime
 
-from fastapi import HTTPException, status
-
 from app.core import security
+from app.core.errors import EmailAlreadyRegistered, InvalidCredentials
 from app.models.user import UserLogin, UserRegister
 from app.repositories import user_repo
 
@@ -10,9 +9,7 @@ from app.repositories import user_repo
 async def register(data: UserRegister) -> dict:
     """Create a new user. Fails if the email is already taken."""
     if await user_repo.find_by_email(data.email):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
-        )
+        raise EmailAlreadyRegistered
     doc = {
         "email": data.email,
         "password_hash": security.hash_password(data.password),
@@ -26,7 +23,5 @@ async def login(data: UserLogin) -> str:
     """Verify credentials and return a signed access token."""
     user = await user_repo.find_by_email(data.email)
     if not user or not security.verify_password(data.password, user["password_hash"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
+        raise InvalidCredentials
     return security.create_access_token(str(user["_id"]))

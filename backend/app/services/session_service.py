@@ -1,6 +1,6 @@
 from bson import ObjectId
-from fastapi import HTTPException, status
 
+from app.core.errors import SessionNotFound
 from app.repositories import message_repo, session_repo
 
 DEFAULT_TITLE = "New chat"
@@ -21,9 +21,7 @@ async def get_owned(session_id: str, user_id: ObjectId) -> dict:
     """
     session = await session_repo.find_by_id(session_id)
     if not session or session["user_id"] != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
+        raise SessionNotFound
     return session
 
 
