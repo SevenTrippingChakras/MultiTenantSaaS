@@ -1,10 +1,3 @@
-"""Domain exceptions and the HTTP error contract.
-
-Services raise the framework-agnostic exceptions defined here; they carry no
-FastAPI/HTTP knowledge. `register_error_handlers` installs the thin layer that
-maps every error to a single envelope: `{"error": {"code", "message"}}`.
-"""
-
 import logging
 
 from fastapi import FastAPI, Request
