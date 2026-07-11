@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import db
+from app.config import settings
 from app.core.errors import register_error_handlers
+from app.core.logging import configure_logging
+from app.core.middleware import RequestContextMiddleware
 from app.routes import auth, chat, sessions
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+configure_logging(settings.log_level)
 logger = logging.getLogger("aichat")
 
 
@@ -35,6 +35,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Added last so it is the outermost middleware: the request id is assigned first.
+app.add_middleware(RequestContextMiddleware)
 
 app.include_router(auth.router)
 app.include_router(sessions.router)
