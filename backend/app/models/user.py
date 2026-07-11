@@ -1,16 +1,26 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
-class UserRegister(BaseModel):
+class _EmailIn(BaseModel):
+    """Base for auth inputs: normalise the email so case/whitespace variants
+    (`A@X.com ` vs `a@x.com`) resolve to one account."""
+
     email: EmailStr
-    password: str = Field(min_length=8)
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
 
 
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
+class UserRegister(_EmailIn):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserLogin(_EmailIn):
+    password: str = Field(max_length=128)
 
 
 class UserOut(BaseModel):

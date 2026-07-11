@@ -8,7 +8,8 @@ from app import db
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import RequestContextMiddleware
+from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from app.core.rate_limit import register_rate_limiting
 from app.routes import auth, chat, sessions
 
 configure_logging(settings.log_level)
@@ -27,14 +28,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AIchat API", lifespan=lifespan)
 
-# Allow the Vite dev server (frontend) to call the API during development.
+register_rate_limiting(app)
+
+# Allowed browser origins come from config (CORS_ORIGINS, comma-separated).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Added last so it is the outermost middleware: the request id is assigned first.
 app.add_middleware(RequestContextMiddleware)

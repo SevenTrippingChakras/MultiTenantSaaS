@@ -9,11 +9,33 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.config import settings
 from app.core.logging import request_id_ctx
 
 logger = logging.getLogger("aichat.request")
 
 REQUEST_ID_HEADER = "X-Request-ID"
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard security headers to every response.
+
+    HSTS is only sent in prod, where traffic is behind TLS (browsers ignore it
+    over plain HTTP anyway, and it would wrongly pin localhost during dev).
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        if settings.env == "prod":
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return response
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):

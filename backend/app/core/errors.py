@@ -44,12 +44,13 @@ class SessionNotFound(AppError):
     message = "Session not found"
 
 
-def _envelope(
+def error_response(
     status_code: int,
     code: str,
     message: str,
     details: list[dict] | None = None,
 ) -> JSONResponse:
+    """Render the single, canonical error envelope `{"error": {code, message}}`."""
     error: dict = {"code": code, "message": message}
     if details is not None:
         error["details"] = details
@@ -77,13 +78,13 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
-        return _envelope(exc.status_code, exc.code, exc.message)
+        return error_response(exc.status_code, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        return _envelope(
+        return error_response(
             422,
             "validation_error",
             "Request validation failed",
@@ -95,9 +96,9 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: StarletteHTTPException
     ) -> JSONResponse:
         # Framework-raised HTTP errors (e.g. missing bearer credentials, 404 routes).
-        return _envelope(exc.status_code, "http_error", str(exc.detail))
+        return error_response(exc.status_code, "http_error", str(exc.detail))
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
-        return _envelope(500, "internal_error", "Internal server error")
+        return error_response(500, "internal_error", "Internal server error")

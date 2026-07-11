@@ -7,13 +7,21 @@ from app.config import settings
 
 ALGORITHM = "HS256"
 
+# bcrypt only considers the first 72 bytes and raises on longer input, so we
+# truncate to keep hash and verify consistent (and avoid a 500 on long input).
+BCRYPT_MAX_BYTES = 72
+
+
+def _bcrypt_bytes(password: str) -> bytes:
+    return password.encode()[:BCRYPT_MAX_BYTES]
+
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(_bcrypt_bytes(password), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(password.encode(), password_hash.encode())
+    return bcrypt.checkpw(_bcrypt_bytes(password), password_hash.encode())
 
 
 def create_access_token(user_id: str) -> str:
