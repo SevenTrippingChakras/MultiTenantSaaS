@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     env: str = "dev"
     mongodb_uri: str
     mongodb_db: str = "aichat"
+    redis_uri: str = "redis://localhost:6379/0"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     jwt_secret: str = DEFAULT_JWT_SECRET
