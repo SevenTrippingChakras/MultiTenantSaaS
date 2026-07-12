@@ -12,6 +12,7 @@ dependencies = [
     "openai>=2.44.0",
     "pydantic-settings>=2.14.2",
     "python-jose[cryptography]>=3.5.0",
+    "redis>=5.0",
     "slowapi>=0.1.10",
 ]
 

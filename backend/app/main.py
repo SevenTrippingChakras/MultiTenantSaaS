@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app import db
+from app import db, redis_client
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
@@ -18,12 +19,15 @@ logger = logging.getLogger("aichat")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Connect to MongoDB on startup, close it on shutdown."""
+    """Connect to MongoDB and Redis on startup, close them on shutdown."""
     await db.connect()
     logger.info("Connected to MongoDB Atlas (db=%s)", db.get_db().name)
+    await redis_client.connect()
+    logger.info("Connected to Redis")
     yield
+    await redis_client.close()
     await db.close()
-    logger.info("MongoDB connection closed")
+    logger.info("MongoDB and Redis connections closed")
 
 
 app = FastAPI(title="AIchat API", lifespan=lifespan)
@@ -53,5 +57,37 @@ register_error_handlers(app)
 
 @app.get("/health")
 async def health():
-    """Liveness check. Confirms the app is up."""
+    """Liveness check. Confirms the app process is up (no dependencies touched)."""
     return {"status": "ok"}
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness check. Pings Mongo and Redis; 503 if either is unreachable.
+
+    Orchestrators use this to decide whether to route traffic here (distinct
+    from /health liveness, which only says the process is alive).
+    """
+    checks = {}
+    for name, ping in (("mongo", _ping_mongo), ("redis", _ping_redis)):
+        try:
+            await ping()
+            checks[name] = "ok"
+        except Exception:
+            logger.exception("Readiness check failed for %s", name)
+            checks[name] = "error"
+
+    ok = all(v == "ok" for v in checks.values())
+    status = 200 if ok else 503
+    return JSONResponse(
+        status_code=status,
+        content={"status": "ok" if ok else "error", "checks": checks},
+    )
+
+
+async def _ping_mongo() -> None:
+    await db.get_db().command("ping")
+
+
+async def _ping_redis() -> None:
+    await redis_client.get_redis().ping()

@@ -1,7 +1,7 @@
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app import db
+from app import db, redis_client
 from app.config import settings
 from app.core.rate_limit import limiter
 from app.main import app
@@ -20,6 +20,7 @@ async def client():
     # Connect inside the test so Motor binds to the event loop pytest-asyncio
     # creates for it (avoids "attached to a different loop" errors).
     await db.connect()
+    await redis_client.connect()
     for name in _COLLECTIONS:
         await db.get_db()[name].delete_many({})
 
@@ -27,4 +28,5 @@ async def client():
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
+    await redis_client.close()
     await db.close()

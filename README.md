@@ -14,15 +14,24 @@ cp backend/.env.example backend/.env
 
 ## Run with scripts (dev, hot-reload)
 
-Two terminals:
+Start this project's own Redis first (its own container on `localhost:6379` — never
+another project's), then the app in two terminals:
 
 ```bash
+# Once per session - this project's Redis (container: chatprod-redis)
+./scripts/dev-redis.sh
+
 # Terminal 1 - backend  (http://localhost:8000)
 ./scripts/dev-backend.sh
 
 # Terminal 2 - frontend (http://localhost:5173)
 ./scripts/dev-frontend.sh
 ```
+
+Redis is a separate running process the backend connects to (via `REDIS_URI`), not a
+library. `dev-redis.sh` brings up ChatProd's own Redis; if port 6379 is already taken by
+a different container, stop that one first (only one process can hold the port). Stop this
+one with `docker compose stop redis`.
 
 First run installs deps automatically (`uv sync` / `npm install`). If the frontend
 deps are missing, run `npm install` inside `frontend/` once.
