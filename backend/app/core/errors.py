@@ -44,6 +44,12 @@ class SessionNotFound(AppError):
     message = "Session not found"
 
 
+class CsrfError(AppError):
+    status_code = 403
+    code = "csrf_failed"
+    message = "CSRF validation failed"
+
+
 def error_response(
     status_code: int,
     code: str,

@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     jwt_secret: str = DEFAULT_JWT_SECRET
-    jwt_expire_min: int = 60
+    access_token_expire_min: int = 15
+    refresh_token_expire_days: int = 30
+    cookie_domain: str | None = None
     log_level: str = "INFO"
     max_message_chars: int = 16000
     cors_origins: list[str] = ["http://localhost:5173"]
@@ -29,6 +31,11 @@ class Settings(BaseSettings):
     default_rate_limit: str = "200/minute"
     auth_rate_limit: str = "10/minute"
     chat_rate_limit: str = "30/minute"
+
+    @property
+    def cookie_secure(self) -> bool:
+        """Send the refresh cookie only over HTTPS outside local dev."""
+        return self.env != "dev"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

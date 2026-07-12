@@ -3,30 +3,29 @@ import { Flame } from "lucide-react";
 import Login from "./pages/Login";
 import Chat from "./pages/Chat";
 import BackgroundFX from "./components/BackgroundFX";
-import { getMe } from "./api";
-import { clearToken, getToken } from "./token";
+import { logout as apiLogout, refreshAccessToken } from "./api";
+import { clearToken } from "./token";
 
 export default function App() {
   const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // On load, verify any stored token is still valid.
+  // On load the in-memory access token is gone, so try a silent refresh: if the
+  // httpOnly refresh cookie is still valid, we get a new access token back.
   useEffect(() => {
     async function check() {
-      if (!getToken()) return setLoading(false);
-      try {
-        await getMe();
-        setAuthed(true);
-      } catch {
-        clearToken();
-      } finally {
-        setLoading(false);
-      }
+      if (await refreshAccessToken()) setAuthed(true);
+      setLoading(false);
     }
     check();
   }, []);
 
-  function logout() {
+  async function logout() {
+    try {
+      await apiLogout();
+    } catch {
+      // Best effort: still clear local state even if the request fails.
+    }
     clearToken();
     setAuthed(false);
   }

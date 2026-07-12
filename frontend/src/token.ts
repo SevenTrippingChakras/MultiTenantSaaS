@@ -1,6 +1,13 @@
-// JWT storage. Kept in localStorage so the session survives page reloads.
-const KEY = "aichat_token";
+// Access token kept in memory only (never localStorage) so page JavaScript /
+// XSS can't read it. The refresh token lives in an httpOnly cookie the browser
+// sends automatically; on reload the app silently refreshes to get a new access
+// token (see refreshAccessToken in api.ts).
+let accessToken: string | null = null;
 
-export const getToken = (): string | null => localStorage.getItem(KEY);
-export const setToken = (t: string): void => localStorage.setItem(KEY, t);
-export const clearToken = (): void => localStorage.removeItem(KEY);
+export const getToken = (): string | null => accessToken;
+export const setToken = (t: string): void => {
+  accessToken = t;
+};
+export const clearToken = (): void => {
+  accessToken = null;
+};
