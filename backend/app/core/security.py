@@ -24,16 +24,44 @@ def verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(_bcrypt_bytes(password), password_hash.encode())
 
 
-def create_access_token(user_id: str) -> str:
-    expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_min)
-    payload = {"sub": user_id, "exp": expire}
+def _encode(
+    user_id: str, token_type: str, expire: datetime, extra: dict | None = None
+) -> str:
+    payload: dict = {"sub": user_id, "type": token_type, "exp": expire}
+    if extra:
+        payload.update(extra)
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> str | None:
-    """Return the user id from a valid token, or None if invalid/expired."""
+def _decode(token: str, expected_type: str) -> dict | None:
+    """Return the payload if the token is valid and of the expected type, else None."""
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
-        return payload.get("sub")
     except JWTError:
         return None
+    if payload.get("type") != expected_type:
+        return None
+    return payload
+
+
+def create_access_token(user_id: str) -> str:
+    expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_min)
+    return _encode(user_id, "access", expire)
+
+
+def create_refresh_token(user_id: str, family_id: str, jti: str) -> str:
+    """A refresh token carries its jti + family id so a replay can be traced to
+    its family even after the jti has been rotated out of the server-side store."""
+    expire = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
+    return _encode(user_id, "refresh", expire, {"jti": jti, "fid": family_id})
+
+
+def decode_access_token(token: str) -> str | None:
+    """Return the user id from a valid access token, or None if invalid/expired."""
+    payload = _decode(token, "access")
+    return payload.get("sub") if payload else None
+
+
+def decode_refresh_token(token: str) -> dict | None:
+    """Return the full payload from a valid refresh token, or None."""
+    return _decode(token, "refresh")
