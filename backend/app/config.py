@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     redis_uri: str = "redis://localhost:6379/0"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    openai_timeout_seconds: float = 30.0
+    openai_max_retries: int = 3
+    system_prompt: str = "You are a helpful assistant."
+    max_context_tokens: int = 8000
     jwt_secret: str = DEFAULT_JWT_SECRET
     access_token_expire_min: int = 15
     refresh_token_expire_days: int = 30
