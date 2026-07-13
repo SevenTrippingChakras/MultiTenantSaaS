@@ -6,6 +6,7 @@ from contextvars import ContextVar
 
 request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
 user_id_ctx: ContextVar[str | None] = ContextVar("user_id", default=None)
+tenant_id_ctx: ContextVar[str | None] = ContextVar("tenant_id", default=None)
 
 # Attributes a bare record already has; anything else was passed via extra= and
 # is swept into the JSON output.
@@ -23,6 +24,10 @@ class ContextFilter(logging.Filter):
             uid = user_id_ctx.get()
             if uid is not None:
                 record.user_id = uid
+        if not hasattr(record, "tenant_id"):
+            tid = tenant_id_ctx.get()
+            if tid is not None:
+                record.tenant_id = tid
         return True
 
 
