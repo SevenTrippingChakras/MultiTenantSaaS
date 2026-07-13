@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from app.core import security
 from app.core.errors import EmailAlreadyRegistered, InvalidCredentials, InvalidToken
 from app.models.user import UserLogin, UserRegister
-from app.repositories import refresh_repo, user_repo
+from app.repositories import refresh_repo, tenant_repo, user_repo
 
 logger = logging.getLogger("aichat.auth")
 
@@ -23,13 +23,23 @@ async def register(data: UserRegister) -> dict:
     """Create a new user. Fails if the email is already taken."""
     if await user_repo.find_by_email(data.email):
         raise EmailAlreadyRegistered
+    # Each new registration gets its own tenant (the isolation boundary).
+    tenant_id = await tenant_repo.create(name=data.email)
     doc = {
         "email": data.email,
         "password_hash": security.hash_password(data.password),
+        "tenant_id": tenant_id,
         "created_at": datetime.now(UTC),
     }
     user_id = await user_repo.insert(doc)
-    logger.info("user registered", extra={"user_id": str(user_id), "email": data.email})
+    logger.info(
+        "user registered",
+        extra={
+            "user_id": str(user_id),
+            "tenant_id": str(tenant_id),
+            "email": data.email,
+        },
+    )
     return {"id": user_id, "email": data.email, "created_at": doc["created_at"]}
 
 

@@ -5,7 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core import security
 from app.core.errors import InvalidToken
-from app.core.logging import user_id_ctx
+from app.core.logging import tenant_id_ctx, user_id_ctx
 from app.repositories import user_repo
 
 bearer = HTTPBearer()
@@ -21,8 +21,9 @@ async def get_current_user(
     user = await user_repo.find_by_id(user_id)
     if not user:
         raise InvalidToken
-    # Bind the user id onto this request's logs.
+    # Bind the user id + tenant id onto this request's logs.
     user_id_ctx.set(str(user["_id"]))
+    tenant_id_ctx.set(str(user["tenant_id"]))
     return user
 
 

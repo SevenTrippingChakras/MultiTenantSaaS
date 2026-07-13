@@ -7,7 +7,7 @@ from app.core.rate_limit import limiter
 from app.main import app
 
 TEST_DB = "aichat_test"
-_COLLECTIONS = ("users", "sessions", "messages")
+_COLLECTIONS = ("users", "sessions", "messages", "tenants")
 
 
 @pytest_asyncio.fixture

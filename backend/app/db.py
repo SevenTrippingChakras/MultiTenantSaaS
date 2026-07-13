@@ -33,5 +33,10 @@ async def close() -> None:
 async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
     """Ensure the indexes our queries rely on exist."""
     await db.users.create_index("email", unique=True)
-    await db.sessions.create_index("user_id")
-    await db.messages.create_index([("session_id", 1), ("created_at", 1)])
+    # Tenant-scoped queries lead with tenant_id, so the indexes do too.
+    await db.sessions.create_index(
+        [("tenant_id", 1), ("user_id", 1), ("updated_at", -1)]
+    )
+    await db.messages.create_index(
+        [("tenant_id", 1), ("session_id", 1), ("created_at", 1)]
+    )

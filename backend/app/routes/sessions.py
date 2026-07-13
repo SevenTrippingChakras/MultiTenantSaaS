@@ -20,13 +20,13 @@ def _to_out(doc: dict) -> dict:
 
 @router.post("", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
 async def create_session(data: SessionCreate, user: CurrentUser):
-    doc = await session_service.create(user["_id"], data.title)
+    doc = await session_service.create(user["tenant_id"], user["_id"], data.title)
     return _to_out(doc)
 
 
 @router.get("", response_model=list[SessionOut])
 async def list_sessions(user: CurrentUser):
-    docs = await session_service.list_for_user(user["_id"])
+    docs = await session_service.list_for_user(user["tenant_id"], user["_id"])
     return [_to_out(d) for d in docs]
 
 
@@ -36,10 +36,12 @@ async def get_messages(
     user: CurrentUser,
     limit: int = 200,
 ):
-    docs = await session_service.list_messages(session_id, user["_id"], limit)
+    docs = await session_service.list_messages(
+        user["tenant_id"], session_id, user["_id"], limit
+    )
     return [message_to_out(d) for d in docs]
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(session_id: str, user: CurrentUser):
-    await session_service.delete(session_id, user["_id"])
+    await session_service.delete(user["tenant_id"], session_id, user["_id"])

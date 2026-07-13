@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from app.db import get_db
+from app.core.tenant_db import scoped
 
 
 def _to_oid(value: str) -> ObjectId | None:
@@ -14,38 +14,42 @@ def _to_oid(value: str) -> ObjectId | None:
         return None
 
 
-async def insert(user_id: ObjectId, title: str) -> dict:
+async def insert(tenant_id: ObjectId, user_id: ObjectId, title: str) -> dict:
     now = datetime.now(UTC)
     doc = {"user_id": user_id, "title": title, "created_at": now, "updated_at": now}
-    result = await get_db().sessions.insert_one(doc)
+    result = await scoped(tenant_id).sessions.insert_one(doc)
     doc["_id"] = result.inserted_id
     return doc
 
 
-async def list_by_user(user_id: ObjectId) -> list[dict]:
-    cursor = get_db().sessions.find({"user_id": user_id}).sort("updated_at", -1)
+async def list_by_user(tenant_id: ObjectId, user_id: ObjectId) -> list[dict]:
+    cursor = (
+        scoped(tenant_id).sessions.find({"user_id": user_id}).sort("updated_at", -1)
+    )
     return await cursor.to_list(length=100)
 
 
-async def find_by_id(session_id: str) -> dict | None:
+async def find_by_id(tenant_id: ObjectId, session_id: str) -> dict | None:
     oid = _to_oid(session_id)
     if oid is None:
         return None
-    return await get_db().sessions.find_one({"_id": oid})
+    return await scoped(tenant_id).sessions.find_one({"_id": oid})
 
 
-async def delete(session_id: str) -> None:
+async def delete(tenant_id: ObjectId, session_id: str) -> None:
     oid = _to_oid(session_id)
     if oid is not None:
-        await get_db().sessions.delete_one({"_id": oid})
+        await scoped(tenant_id).sessions.delete_one({"_id": oid})
 
 
-async def touch(session_id: ObjectId) -> None:
+async def touch(tenant_id: ObjectId, session_id: ObjectId) -> None:
     """Bump updated_at so the session rises to the top of the list."""
-    await get_db().sessions.update_one(
+    await scoped(tenant_id).sessions.update_one(
         {"_id": session_id}, {"$set": {"updated_at": datetime.now(UTC)}}
     )
 
 
-async def set_title(session_id: ObjectId, title: str) -> None:
-    await get_db().sessions.update_one({"_id": session_id}, {"$set": {"title": title}})
+async def set_title(tenant_id: ObjectId, session_id: ObjectId, title: str) -> None:
+    await scoped(tenant_id).sessions.update_one(
+        {"_id": session_id}, {"$set": {"title": title}}
+    )

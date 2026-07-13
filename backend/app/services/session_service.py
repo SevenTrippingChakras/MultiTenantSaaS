@@ -6,33 +6,35 @@ from app.repositories import message_repo, session_repo
 DEFAULT_TITLE = "New chat"
 
 
-async def create(user_id: ObjectId, title: str | None) -> dict:
-    return await session_repo.insert(user_id, title or DEFAULT_TITLE)
+async def create(tenant_id: ObjectId, user_id: ObjectId, title: str | None) -> dict:
+    return await session_repo.insert(tenant_id, user_id, title or DEFAULT_TITLE)
 
 
-async def list_for_user(user_id: ObjectId) -> list[dict]:
-    return await session_repo.list_by_user(user_id)
+async def list_for_user(tenant_id: ObjectId, user_id: ObjectId) -> list[dict]:
+    return await session_repo.list_by_user(tenant_id, user_id)
 
 
-async def get_owned(session_id: str, user_id: ObjectId) -> dict:
+async def get_owned(tenant_id: ObjectId, session_id: str, user_id: ObjectId) -> dict:
     """Return the session only if it belongs to this user, else 404.
 
-    We return 404 (not 403) so we don't leak that another user's session exists.
+    Tenant scoping makes another tenant's session invisible; the user_id check
+    guards ownership within the tenant. We return 404 (not 403) so we don't leak
+    that a session exists.
     """
-    session = await session_repo.find_by_id(session_id)
+    session = await session_repo.find_by_id(tenant_id, session_id)
     if not session or session["user_id"] != user_id:
         raise SessionNotFound
     return session
 
 
-async def delete(session_id: str, user_id: ObjectId) -> None:
-    await get_owned(session_id, user_id)
-    await session_repo.delete(session_id)
+async def delete(tenant_id: ObjectId, session_id: str, user_id: ObjectId) -> None:
+    await get_owned(tenant_id, session_id, user_id)
+    await session_repo.delete(tenant_id, session_id)
 
 
 async def list_messages(
-    session_id: str, user_id: ObjectId, limit: int = 200
+    tenant_id: ObjectId, session_id: str, user_id: ObjectId, limit: int = 200
 ) -> list[dict]:
     """Return a session's messages in order, only if the user owns it."""
-    session = await get_owned(session_id, user_id)
-    return await message_repo.list_by_session(session["_id"], limit)
+    session = await get_owned(tenant_id, session_id, user_id)
+    return await message_repo.list_by_session(tenant_id, session["_id"], limit)
