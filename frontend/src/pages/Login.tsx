@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Flame } from "lucide-react";
-import { login, register } from "../api";
-import { setToken } from "../token";
+import { authenticate } from "./Login.helper";
 
 interface LoginProps {
   onAuthed: () => void;
@@ -19,9 +18,7 @@ export default function Login({ onAuthed }: LoginProps) {
     setError("");
     setBusy(true);
     try {
-      if (mode === "register") await register(email, password);
-      const { access_token } = await login(email, password);
-      setToken(access_token);
+      await authenticate(mode, email, password);
       onAuthed();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

@@ -8,6 +8,10 @@ interface ChatWindowProps {
   onSend: (text: string) => void;
   onStop: () => void;
   busy: boolean;
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  olderError: string | null;
+  onLoadOlder: () => void;
 }
 
 export default function ChatWindow({
@@ -15,13 +19,21 @@ export default function ChatWindow({
   onSend,
   onStop,
   busy,
+  hasOlder,
+  loadingOlder,
+  olderError,
+  onLoadOlder,
 }: ChatWindowProps) {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Scroll to the newest message when one is sent or streamed. Keyed on the last
+  // message so prepending older history (which leaves the last one unchanged)
+  // doesn't yank the view back to the bottom.
+  const last = messages[messages.length - 1];
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [last?.role, last?.content]);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -35,6 +47,19 @@ export default function ChatWindow({
     <main className="glass flex flex-1 flex-col overflow-hidden rounded-2xl">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-6 px-5 py-8">
+          {hasOlder && (
+            <div className="flex flex-col items-center gap-1.5">
+              <button
+                onClick={onLoadOlder}
+                disabled={loadingOlder}
+                className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-sm text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+              >
+                {loadingOlder ? "Loading…" : olderError ? "Retry" : "Load older messages"}
+              </button>
+              {olderError && <p className="text-xs text-destructive">{olderError}</p>}
+            </div>
+          )}
+
           {messages.length === 0 && (
             <div className="mt-28 flex flex-col items-center gap-5 text-center">
               <div className="flex size-20 items-center justify-center rounded-2xl bg-gradient-to-br from-ember to-[#ff6f2a] shadow-xl shadow-ember/30">
@@ -51,7 +76,7 @@ export default function ChatWindow({
 
           {messages.map((m, i) => (
             <div
-              key={i}
+              key={m.id ?? `pending-${i}`}
               className={cn(
                 "animate-pop-in flex items-end gap-2.5",
                 m.role === "user" ? "justify-end" : "justify-start",

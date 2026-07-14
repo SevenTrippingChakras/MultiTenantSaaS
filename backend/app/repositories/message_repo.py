@@ -1,9 +1,18 @@
 from datetime import UTC, datetime
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from app.core.tenant_db import scoped
+
+
+def _to_oid(value: str) -> ObjectId | None:
+    """Parse a string id to ObjectId, or None if malformed."""
+    try:
+        return ObjectId(value)
+    except InvalidId:
+        return None
 
 
 async def insert(
@@ -42,3 +51,25 @@ async def list_by_session(
     )
     docs = await cursor.to_list(length=limit)
     return list(reversed(docs))
+
+
+async def page_by_session(
+    tenant_id: ObjectId,
+    session_id: ObjectId,
+    limit: int,
+    before: str | None = None,
+) -> list[dict]:
+    """Keyset page of a session's messages for scroll-up paging, newest first.
+
+    Messages are immutable and ordered by insertion, so the cursor is just `_id`.
+    A `before` cursor returns messages strictly older than that id. Over-fetches
+    one row so the caller can detect whether an older page remains. Returned in
+    descending `_id` order (newest first); `build_page_desc` flips to chronological.
+    """
+    flt: dict = {"session_id": session_id}
+    if before:
+        oid = _to_oid(before)
+        if oid is not None:
+            flt["_id"] = {"$lt": oid}
+    cursor = scoped(tenant_id).messages.find(flt).sort("_id", -1).limit(limit + 1)
+    return await cursor.to_list(length=limit + 1)

@@ -21,7 +21,7 @@ async def test_create_list_and_read_session(client):
 
     msgs = await client.get(f"/sessions/{sid}/messages", headers=h)
     assert msgs.status_code == 200
-    assert msgs.json() == []
+    assert msgs.json() == {"items": [], "next_cursor": None}
 
     deleted = await client.delete(f"/sessions/{sid}", headers=h)
     assert deleted.status_code == 204

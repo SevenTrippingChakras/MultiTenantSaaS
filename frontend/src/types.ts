@@ -22,3 +22,10 @@ export interface TokenResponse {
   access_token: string;
   token_type: string;
 }
+
+// A keyset page from the API: the items plus a cursor for the next page
+// (null when there are no more).
+export interface Page<T> {
+  items: T[];
+  next_cursor: string | null;
+}
