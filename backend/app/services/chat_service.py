@@ -3,7 +3,7 @@ from typing import cast
 from bson import ObjectId
 from openai.types.chat import ChatCompletionMessageParam
 
-from app import llm, token_budget
+from app import db, llm, token_budget
 from app.config import settings
 from app.repositories import message_repo, session_repo
 
@@ -42,12 +42,17 @@ async def stream(
     given, the final token counts are copied into it so the route can emit them
     on the closing SSE event. The caller checks ownership first.
     """
-    await message_repo.insert(tenant_id, sid, "user", content)
+    # First user turn also names the session; persist both writes atomically so
+    # a message can't land without its title (or vice versa).
+    is_first = await message_repo.count_by_session(tenant_id, sid) == 0
+    async with db.transaction() as txn:
+        await message_repo.insert(tenant_id, sid, "user", content, txn=txn)
+        if is_first:
+            await session_repo.set_title(
+                tenant_id, sid, content[:TITLE_MAX_LEN], txn=txn
+            )
 
     history = await message_repo.list_by_session(tenant_id, sid)
-    if len(history) == 1:  # first message -> use it as the session title
-        await session_repo.set_title(tenant_id, sid, content[:TITLE_MAX_LEN])
-
     prompt = _build_prompt(history)
 
     chunks: list[str] = []
@@ -61,11 +66,15 @@ async def stream(
             usage_out.update(usage)
         reply = "".join(chunks)
         if reply:
-            await message_repo.insert(
-                tenant_id,
-                sid,
-                "assistant",
-                reply,
-                metadata={"model": settings.openai_model, "usage": usage},
-            )
-            await session_repo.touch(tenant_id, sid)
+            # Assistant reply + session bump go together so the list never shows
+            # a session touched newer than its last stored message.
+            async with db.transaction() as txn:
+                await message_repo.insert(
+                    tenant_id,
+                    sid,
+                    "assistant",
+                    reply,
+                    metadata={"model": settings.openai_model, "usage": usage},
+                    txn=txn,
+                )
+                await session_repo.touch(tenant_id, sid, txn=txn)

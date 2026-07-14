@@ -1,6 +1,7 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.core.deps import CurrentUser
+from app.core.pagination import DEFAULT_LIMIT, Page, build_page, clamp_limit
 from app.models.message import MessageOut
 from app.models.message import to_out as message_to_out
 from app.models.session import SessionCreate, SessionOut
@@ -24,10 +25,17 @@ async def create_session(data: SessionCreate, user: CurrentUser):
     return _to_out(doc)
 
 
-@router.get("", response_model=list[SessionOut])
-async def list_sessions(user: CurrentUser):
-    docs = await session_service.list_for_user(user["tenant_id"], user["_id"])
-    return [_to_out(d) for d in docs]
+@router.get("", response_model=Page[SessionOut])
+async def list_sessions(
+    user: CurrentUser,
+    limit: int = DEFAULT_LIMIT,
+    after: str | None = Query(None),
+):
+    limit = clamp_limit(limit)
+    docs = await session_service.page_for_user(
+        user["tenant_id"], user["_id"], limit, after
+    )
+    return build_page(docs, limit, _to_out)
 
 
 @router.get("/{session_id}/messages", response_model=list[MessageOut])
