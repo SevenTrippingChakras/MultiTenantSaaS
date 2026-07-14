@@ -17,6 +17,10 @@ interface SidebarProps {
   onNew: () => void;
   onDelete: (id: string) => void;
   onLogout: () => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  moreError: string | null;
+  onLoadMore: () => void;
 }
 
 export default function Sidebar({
@@ -26,6 +30,10 @@ export default function Sidebar({
   onNew,
   onDelete,
   onLogout,
+  hasMore,
+  loadingMore,
+  moreError,
+  onLoadMore,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -108,6 +116,18 @@ export default function Sidebar({
                   </div>
                 );
               })}
+              {hasMore && (
+                <button
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  className="mt-1 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-white/5 hover:text-foreground disabled:opacity-50"
+                >
+                  {loadingMore ? "Loading…" : moreError ? "Retry" : "Load more"}
+                </button>
+              )}
+              {moreError && (
+                <p className="px-3 text-xs text-destructive">{moreError}</p>
+              )}
             </div>
           </div>
         </>

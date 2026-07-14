@@ -1,7 +1,13 @@
 from fastapi import APIRouter, Query, status
 
 from app.core.deps import CurrentUser
-from app.core.pagination import DEFAULT_LIMIT, Page, build_page, clamp_limit
+from app.core.pagination import (
+    DEFAULT_LIMIT,
+    Page,
+    build_page,
+    build_page_desc,
+    clamp_limit,
+)
 from app.models.message import MessageOut
 from app.models.message import to_out as message_to_out
 from app.models.session import SessionCreate, SessionOut
@@ -38,16 +44,19 @@ async def list_sessions(
     return build_page(docs, limit, _to_out)
 
 
-@router.get("/{session_id}/messages", response_model=list[MessageOut])
+@router.get("/{session_id}/messages", response_model=Page[MessageOut])
 async def get_messages(
     session_id: str,
     user: CurrentUser,
-    limit: int = 200,
+    limit: int = DEFAULT_LIMIT,
+    before: str | None = Query(None),
 ):
-    docs = await session_service.list_messages(
-        user["tenant_id"], session_id, user["_id"], limit
+    """Newest messages first; page backward (older) with `?before=<id>`."""
+    limit = clamp_limit(limit)
+    docs = await session_service.page_messages(
+        user["tenant_id"], session_id, user["_id"], limit, before
     )
-    return [message_to_out(d) for d in docs]
+    return build_page_desc(docs, limit, message_to_out)
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import ChatWindow from "../components/ChatWindow";
+import { streamChat } from "../api";
 import {
   createSession,
   deleteSession,
-  getMessages,
-  listSessions,
+  loadInitialSessions,
+  loadLatestMessages,
+  loadMoreSessions,
+  loadOlderMessages,
   stopChat,
-  streamChat,
-} from "../api";
+} from "./Chat.helper";
 import type { Message, Session } from "../types";
 
 interface ChatProps {
@@ -17,8 +19,16 @@ interface ChatProps {
 
 export default function Chat({ onLogout }: ChatProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
+  // Cursor to the next older page of sessions (null when none remain).
+  const [sessionsCursor, setSessionsCursor] = useState<string | null>(null);
+  const [loadingMoreSessions, setLoadingMoreSessions] = useState(false);
+  const [moreSessionsError, setMoreSessionsError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Cursor to the next older page of history (null when none remain).
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // The in-flight stream: its abort controller + the session/generation id we
   // need to cancel it server-side. Refs so the Stop handler always sees the live
@@ -31,12 +41,49 @@ export default function Chat({ onLogout }: ChatProps) {
   }, []);
 
   async function refreshSessions() {
-    setSessions(await listSessions());
+    const { sessions, cursor } = await loadInitialSessions();
+    setSessions(sessions);
+    setSessionsCursor(cursor);
+  }
+
+  // Append the next older page of sessions when the user asks for more.
+  async function loadMore() {
+    if (!sessionsCursor || loadingMoreSessions) return;
+    setLoadingMoreSessions(true);
+    setMoreSessionsError(null);
+    try {
+      const more = await loadMoreSessions(sessionsCursor);
+      setSessions((s) => [...s, ...more.sessions]);
+      setSessionsCursor(more.cursor);
+    } catch (e) {
+      setMoreSessionsError(e instanceof Error ? e.message : "Failed to load more");
+    } finally {
+      setLoadingMoreSessions(false);
+    }
   }
 
   async function selectSession(id: string) {
     setActiveId(id);
-    setMessages(await getMessages(id));
+    setOlderError(null);
+    const { messages, cursor } = await loadLatestMessages(id);
+    setMessages(messages);
+    setCursor(cursor);
+  }
+
+  // Prepend the next older page when the user scrolls back through history.
+  async function loadOlder() {
+    if (!activeId || !cursor || loadingOlder) return;
+    setLoadingOlder(true);
+    setOlderError(null);
+    try {
+      const older = await loadOlderMessages(activeId, cursor);
+      setMessages((m) => [...older.messages, ...m]);
+      setCursor(older.cursor);
+    } catch (e) {
+      setOlderError(e instanceof Error ? e.message : "Failed to load older messages");
+    } finally {
+      setLoadingOlder(false);
+    }
   }
 
   // New chat clears the view; the session is created on the first message
@@ -44,6 +91,8 @@ export default function Chat({ onLogout }: ChatProps) {
   function newChat() {
     setActiveId(null);
     setMessages([]);
+    setCursor(null);
+    setOlderError(null);
   }
 
   async function removeSession(id: string) {
@@ -51,6 +100,7 @@ export default function Chat({ onLogout }: ChatProps) {
     if (id === activeId) {
       setActiveId(null);
       setMessages([]);
+      setCursor(null);
     }
     await refreshSessions();
   }
@@ -139,8 +189,21 @@ export default function Chat({ onLogout }: ChatProps) {
         onNew={newChat}
         onDelete={removeSession}
         onLogout={onLogout}
+        hasMore={sessionsCursor !== null}
+        loadingMore={loadingMoreSessions}
+        moreError={moreSessionsError}
+        onLoadMore={loadMore}
       />
-      <ChatWindow messages={messages} onSend={send} onStop={stop} busy={busy} />
+      <ChatWindow
+        messages={messages}
+        onSend={send}
+        onStop={stop}
+        busy={busy}
+        hasOlder={cursor !== null}
+        loadingOlder={loadingOlder}
+        olderError={olderError}
+        onLoadOlder={loadOlder}
+      />
     </div>
   );
 }

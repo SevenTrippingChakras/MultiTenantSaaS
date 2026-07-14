@@ -13,7 +13,7 @@ from collections.abc import Callable
 
 from pydantic import BaseModel
 
-DEFAULT_LIMIT = 50
+DEFAULT_LIMIT = 10
 MAX_LIMIT = 100
 
 
@@ -42,3 +42,20 @@ def build_page[T](docs: list[dict], limit: int, to_out: Callable[[dict], T]) -> 
     kept = docs[:limit]
     next_cursor = str(kept[-1]["_id"]) if has_more and kept else None
     return Page(items=[to_out(d) for d in kept], next_cursor=next_cursor)
+
+
+def build_page_desc[T](
+    docs: list[dict], limit: int, to_out: Callable[[dict], T]
+) -> Page[T]:
+    """Build a backward (scroll-up) page from newest-first docs.
+
+    The repo over-fetches `limit + 1` rows in descending `_id` order. The extra
+    row, if present, is the older probe: it means an older page exists, so the
+    oldest kept row's `_id` becomes `next_cursor` (the client echoes it as
+    `?before=`). Items are returned oldest-first for natural top-to-bottom
+    display, so the client prepends each older page above the current one.
+    """
+    has_more = len(docs) > limit
+    kept = docs[:limit]
+    next_cursor = str(kept[-1]["_id"]) if has_more and kept else None
+    return Page(items=[to_out(d) for d in reversed(kept)], next_cursor=next_cursor)

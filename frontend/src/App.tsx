@@ -3,8 +3,8 @@ import { Flame } from "lucide-react";
 import Login from "./pages/Login";
 import Chat from "./pages/Chat";
 import BackgroundFX from "./components/BackgroundFX";
-import { logout as apiLogout, refreshAccessToken } from "./api";
-import { clearToken } from "./token";
+import { refreshAccessToken } from "./api";
+import { signOut } from "./App.helper";
 
 export default function App() {
   const [authed, setAuthed] = useState(false);
@@ -21,12 +21,7 @@ export default function App() {
   }, []);
 
   async function logout() {
-    try {
-      await apiLogout();
-    } catch {
-      // Best effort: still clear local state even if the request fails.
-    }
-    clearToken();
+    await signOut();
     setAuthed(false);
   }
 

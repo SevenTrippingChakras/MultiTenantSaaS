@@ -1,16 +1,20 @@
-import { API_URL } from "./config";
+import axios, { type AxiosError, type AxiosResponse } from "axios";
+import { API_URL, MESSAGE_PAGE_SIZE, SESSION_PAGE_SIZE } from "./config";
 import { clearToken, getToken, setToken } from "./token";
-import type { Message, Session, TokenResponse, User } from "./types";
+import type { Message, Page, Session, TokenResponse, User } from "./types";
 
-interface RequestOptions {
-  method?: string;
-  body?: unknown;
-  // Cookie-authed POSTs (logout) must echo the CSRF cookie in a header.
-  csrf?: boolean;
-  // Whether a 401 should trigger a silent refresh + one retry. Off for the
-  // auth endpoints, where a 401 is a real credential failure.
-  retryAuth?: boolean;
+// Per-request flags we read back in the interceptors.
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    // Off for auth endpoints, where a 401 is a real credential failure, not an
+    // expired token to refresh.
+    retryAuth?: boolean;
+    // Set once we've already retried a request after a refresh, so we don't loop.
+    _retried?: boolean;
+  }
 }
+
+const api = axios.create({ baseURL: API_URL, withCredentials: true });
 
 /** Read a non-httpOnly cookie (the CSRF token) by name. */
 function readCookie(name: string): string | null {
@@ -18,116 +22,153 @@ function readCookie(name: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-function buildHeaders(opts: RequestOptions): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+// Attach the access token (and CSRF token for cookie-authed routes) to every request.
+api.interceptors.request.use((config) => {
   const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (opts.csrf) {
-    const csrf = readCookie("csrf_token");
-    if (csrf) headers["X-CSRF-Token"] = csrf;
-  }
-  return headers;
-}
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const csrf = readCookie("csrf_token");
+  if (csrf) config.headers["X-CSRF-Token"] = csrf;
+  return config;
+});
+
+// On a 401, silently refresh the access token and retry the request once. Any
+// other error is normalised to a plain Error carrying the backend's message.
+api.interceptors.response.use(
+  (res) => res,
+  async (error: AxiosError<{ error?: { message?: string } }>) => {
+    const config = error.config;
+    const canRetry = config && config.retryAuth !== false && !config._retried;
+    if (error.response?.status === 401 && canRetry) {
+      config._retried = true;
+      if (await refreshAccessToken()) return api(config);
+    }
+    const message = error.response?.data?.error?.message ?? error.message;
+    return Promise.reject(new Error(message));
+  },
+);
 
 let refreshInFlight: Promise<boolean> | null = null;
 
 /** Trade the refresh cookie for a fresh access token. Returns success.
  *
- * Single-flight: concurrent callers (e.g. several requests that 401 at once, or
- * React StrictMode double-invoking an effect) share one in-flight refresh. Each
- * refresh rotates the token, so firing several at once would make the later ones
- * look like a replay and trip server-side reuse detection, killing the session.
+ * Single-flight: concurrent callers share one in-flight refresh. Each refresh
+ * rotates the token, so firing several at once would make the later ones look
+ * like a replay and trip server-side reuse detection, killing the session.
+ *
+ * Uses bare axios (not the `api` instance) so it never re-enters the 401 interceptor.
  */
 export function refreshAccessToken(): Promise<boolean> {
-  if (!refreshInFlight) {
-    refreshInFlight = doRefresh().finally(() => {
-      refreshInFlight = null;
-    });
-  }
+  refreshInFlight ??= doRefresh().finally(() => {
+    refreshInFlight = null;
+  });
   return refreshInFlight;
 }
 
 async function doRefresh(): Promise<boolean> {
   const csrf = readCookie("csrf_token");
-  const res = await fetch(`${API_URL}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    headers: csrf ? { "X-CSRF-Token": csrf } : {},
-  });
-  if (!res.ok) {
+  try {
+    const { data } = await axios.post<TokenResponse>(`${API_URL}/auth/refresh`, null, {
+      withCredentials: true,
+      headers: csrf ? { "X-CSRF-Token": csrf } : {},
+    });
+    setToken(data.access_token);
+    return true;
+  } catch {
     clearToken();
     return false;
   }
-  const data: TokenResponse = await res.json();
-  setToken(data.access_token);
-  return true;
 }
 
-function send(path: string, opts: RequestOptions): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
-    method: opts.method ?? "GET",
-    headers: buildHeaders(opts),
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-    credentials: "include",
-  });
-}
-
-async function parse<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(detail.error?.message || `Request failed: ${res.status}`);
-  }
-  return res.status === 204 ? (null as T) : res.json();
-}
-
-// Core request helper: attaches the JWT, and on a 401 silently refreshes the
-// access token and retries the request once.
-async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  let res = await send(path, opts);
-  if (res.status === 401 && opts.retryAuth !== false && (await refreshAccessToken())) {
-    res = await send(path, opts);
-  }
-  return parse<T>(res);
-}
+// Service functions return the full AxiosResponse — the caller's helper decides
+// what to pull out of it (data, a nested field, status, headers). Keeping them as
+// thin transport means a change to the response shape only touches the helper.
 
 // --- Auth ---
-export const register = (email: string, password: string) =>
-  request<User>("/auth/register", {
+export function register(email: string, password: string): Promise<AxiosResponse<User>> {
+  return api.request<User>({
     method: "POST",
-    body: { email, password },
+    url: "/auth/register",
+    data: { email, password },
     retryAuth: false,
   });
+}
 
-export const login = (email: string, password: string) =>
-  request<TokenResponse>("/auth/login", {
+export function login(email: string, password: string): Promise<AxiosResponse<TokenResponse>> {
+  return api.request<TokenResponse>({
     method: "POST",
-    body: { email, password },
+    url: "/auth/login",
+    data: { email, password },
     retryAuth: false,
   });
+}
 
-export const logout = () =>
-  request<null>("/auth/logout", { method: "POST", csrf: true, retryAuth: false });
+export function logout(): Promise<AxiosResponse> {
+  return api.request({
+    method: "POST",
+    url: "/auth/logout",
+    retryAuth: false,
+  });
+}
 
-export const getMe = () => request<User>("/auth/me");
+export function getMe(): Promise<AxiosResponse<User>> {
+  return api.request<User>({
+    method: "GET",
+    url: "/auth/me",
+  });
+}
 
 // --- Sessions ---
-export const listSessions = () => request<Session[]>("/sessions");
-export const createSession = (title: string | null) =>
-  request<Session>("/sessions", { method: "POST", body: { title } });
-export const deleteSession = (id: string) =>
-  request<null>(`/sessions/${id}`, { method: "DELETE" });
-export const getMessages = (id: string) =>
-  request<Message[]>(`/sessions/${id}/messages`);
+export function listSessions(after?: string | null): Promise<AxiosResponse<Page<Session>>> {
+  return api.request<Page<Session>>({
+    method: "GET",
+    url: "/sessions",
+    params: { limit: SESSION_PAGE_SIZE, ...(after ? { after } : {}) },
+  });
+}
 
-// --- Chat (SSE streaming over fetch) ---
+export function createSession(title: string | null): Promise<AxiosResponse<Session>> {
+  return api.request<Session>({
+    method: "POST",
+    url: "/sessions",
+    data: { title },
+  });
+}
+
+export function deleteSession(id: string): Promise<AxiosResponse> {
+  return api.request({
+    method: "DELETE",
+    url: `/sessions/${id}`,
+  });
+}
+
+// One page of a session's messages, newest first. Pass the previous page's
+// `next_cursor` as `before` to load older messages.
+export function getMessages(
+  id: string,
+  before?: string | null,
+): Promise<AxiosResponse<Page<Message>>> {
+  return api.request<Page<Message>>({
+    method: "GET",
+    url: `/sessions/${id}/messages`,
+    params: { limit: MESSAGE_PAGE_SIZE, ...(before ? { before } : {}) },
+  });
+}
+
+// --- Chat (SSE streaming) ---
+// Kept on native fetch: axios buffers the whole response body, so it can't
+// deliver tokens one-by-one as they stream in.
 function streamFetch(
   sessionId: string,
   content: string,
   signal?: AbortSignal,
 ): Promise<Response> {
+  const token = getToken();
   return fetch(`${API_URL}/chat/${sessionId}`, {
     method: "POST",
-    headers: buildHeaders({ body: content }),
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ content }),
     credentials: "include",
     signal,
@@ -201,7 +242,12 @@ export async function streamChat(
 }
 
 // Cancel an in-flight stream server-side so we stop paying for tokens.
-export const stopChat = (sessionId: string, generationId: string) =>
-  request<{ stopped: boolean }>(`/chat/${sessionId}/stop/${generationId}`, {
+export function stopChat(
+  sessionId: string,
+  generationId: string,
+): Promise<AxiosResponse<{ stopped: boolean }>> {
+  return api.request<{ stopped: boolean }>({
     method: "POST",
+    url: `/chat/${sessionId}/stop/${generationId}`,
   });
+}

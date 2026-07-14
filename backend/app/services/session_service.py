@@ -39,9 +39,14 @@ async def delete(tenant_id: ObjectId, session_id: str, user_id: ObjectId) -> Non
     await session_repo.delete(tenant_id, session_id)
 
 
-async def list_messages(
-    tenant_id: ObjectId, session_id: str, user_id: ObjectId, limit: int = 200
+async def page_messages(
+    tenant_id: ObjectId,
+    session_id: str,
+    user_id: ObjectId,
+    limit: int,
+    before: str | None,
 ) -> list[dict]:
-    """Return a session's messages in order, only if the user owns it."""
+    """A keyset page of a session's messages (newest first, over-fetched by one),
+    for scroll-up paging. Only if the user owns the session."""
     session = await get_owned(tenant_id, session_id, user_id)
-    return await message_repo.list_by_session(tenant_id, session["_id"], limit)
+    return await message_repo.page_by_session(tenant_id, session["_id"], limit, before)
