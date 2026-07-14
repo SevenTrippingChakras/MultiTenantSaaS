@@ -61,6 +61,10 @@ async def stream(
     carrying the token counts, so streamed calls are metered like blocking ones.
     If `usage_out` is given, the token counts are copied into it once the stream
     ends, so the caller can persist/meter usage (not just have it logged).
+
+    The stream is closed in a `finally` so a client disconnect or stop request
+    (which throws GeneratorExit into this generator) tears down the upstream
+    HTTP connection to OpenAI, ending token billing instead of leaking it.
     """
     start = time.perf_counter()
     resp = await client.chat.completions.create(
@@ -79,6 +83,7 @@ async def stream(
                 if delta:
                     yield delta
     finally:
+        await resp.close()
         _log_usage(usage, start)
         if usage_out is not None:
             usage_out.update(_usage_dict(usage))

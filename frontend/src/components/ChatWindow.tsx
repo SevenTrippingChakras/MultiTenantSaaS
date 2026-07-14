@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Flame, Send } from "lucide-react";
+import { Flame, Send, Square } from "lucide-react";
 import type { Message } from "../types";
 import { cn } from "@/lib/utils";
 
 interface ChatWindowProps {
   messages: Message[];
   onSend: (text: string) => void;
+  onStop: () => void;
   busy: boolean;
 }
 
-export default function ChatWindow({ messages, onSend, busy }: ChatWindowProps) {
+export default function ChatWindow({
+  messages,
+  onSend,
+  onStop,
+  busy,
+}: ChatWindowProps) {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -64,13 +70,16 @@ export default function ChatWindow({ messages, onSend, busy }: ChatWindowProps) 
                     : "bubble-l border border-white/15 bg-[#17403a] text-foreground",
                 )}
               >
-                {m.content || (
-                  <span className="inline-flex gap-1">
-                    <span className="size-2 animate-bounce rounded-full bg-moss [animation-delay:-0.3s]" />
-                    <span className="size-2 animate-bounce rounded-full bg-moss [animation-delay:-0.15s]" />
-                    <span className="size-2 animate-bounce rounded-full bg-moss" />
-                  </span>
-                )}
+                {m.content ||
+                  (busy && i === messages.length - 1 ? (
+                    <span className="inline-flex gap-1">
+                      <span className="size-2 animate-bounce rounded-full bg-moss [animation-delay:-0.3s]" />
+                      <span className="size-2 animate-bounce rounded-full bg-moss [animation-delay:-0.15s]" />
+                      <span className="size-2 animate-bounce rounded-full bg-moss" />
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground italic">stopped</span>
+                  ))}
               </div>
             </div>
           ))}
@@ -87,18 +96,28 @@ export default function ChatWindow({ messages, onSend, busy }: ChatWindowProps) 
             disabled={busy}
             className="h-12 flex-1 rounded-xl border border-white/15 bg-white/5 px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-moss/60 focus:outline-none focus:ring-2 focus:ring-moss/30"
           />
-          <button
-            type="submit"
-            disabled={busy || !input.trim()}
-            className={cn(
-              "flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-ember to-[#ff6f2a] text-[#2a1400] shadow-lg shadow-ember/25 transition",
-              busy || !input.trim()
-                ? "opacity-40"
-                : "hover:brightness-105 active:scale-95",
-            )}
-          >
-            <Send className="size-5 stroke-[2.5]" />
-          </button>
+          {busy ? (
+            <button
+              type="button"
+              onClick={onStop}
+              aria-label="Stop generating"
+              className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-ember/60 bg-ember/15 text-ember shadow-lg shadow-ember/10 transition hover:bg-ember/25 active:scale-95"
+            >
+              <Square className="size-5 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              aria-label="Send message"
+              className={cn(
+                "flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-ember to-[#ff6f2a] text-[#2a1400] shadow-lg shadow-ember/25 transition",
+                !input.trim() ? "opacity-40" : "hover:brightness-105 active:scale-95",
+              )}
+            >
+              <Send className="size-5 stroke-[2.5]" />
+            </button>
+          )}
         </form>
       </div>
     </main>
