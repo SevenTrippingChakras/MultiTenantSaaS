@@ -120,24 +120,49 @@ export const getMessages = (id: string) =>
   request<Message[]>(`/sessions/${id}/messages`);
 
 // --- Chat (SSE streaming over fetch) ---
-function streamFetch(sessionId: string, content: string): Promise<Response> {
+function streamFetch(
+  sessionId: string,
+  content: string,
+  signal?: AbortSignal,
+): Promise<Response> {
   return fetch(`${API_URL}/chat/${sessionId}`, {
     method: "POST",
     headers: buildHeaders({ body: content }),
     body: JSON.stringify({ content }),
     credentials: "include",
+    signal,
   });
 }
 
-// Calls onToken(delta) for each token; resolves when the stream ends.
+function isAbort(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
+}
+
+interface StreamOptions {
+  // The server sends a generation id as its first event; the UI keeps it so it
+  // can call stopChat() to cancel this stream server-side.
+  onGenerationId?: (id: string) => void;
+  // Aborting stops reading and closes the connection (which the server also
+  // treats as a stop). An abort resolves the promise normally, not as an error.
+  signal?: AbortSignal;
+}
+
+// Calls onToken(delta) for each token; resolves when the stream ends (or aborts).
 export async function streamChat(
   sessionId: string,
   content: string,
   onToken: (delta: string) => void,
+  opts: StreamOptions = {},
 ): Promise<void> {
-  let res = await streamFetch(sessionId, content);
-  if (res.status === 401 && (await refreshAccessToken())) {
-    res = await streamFetch(sessionId, content);
+  let res: Response;
+  try {
+    res = await streamFetch(sessionId, content, opts.signal);
+    if (res.status === 401 && (await refreshAccessToken())) {
+      res = await streamFetch(sessionId, content, opts.signal);
+    }
+  } catch (e) {
+    if (isAbort(e)) return;
+    throw e;
   }
   if (!res.ok || !res.body) throw new Error(`Chat failed: ${res.status}`);
 
@@ -145,22 +170,38 @@ export async function streamChat(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    // SSE frames are separated by a blank line.
-    const frames = buffer.split("\n\n");
-    buffer = frames.pop() ?? "";
+      // SSE frames are separated by a blank line. Heartbeat comments (": ping")
+      // don't start with "data:", so they're skipped.
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
 
-    for (const frame of frames) {
-      const line = frame.trim();
-      if (!line.startsWith("data:")) continue;
-      const obj = JSON.parse(line.slice(5).trim());
-      if (obj.error) throw new Error(obj.error);
-      if (obj.done) return;
-      if (obj.delta) onToken(obj.delta);
+      for (const frame of frames) {
+        const line = frame.trim();
+        if (!line.startsWith("data:")) continue;
+        const obj = JSON.parse(line.slice(5).trim());
+        if (obj.generation_id) {
+          opts.onGenerationId?.(obj.generation_id);
+          continue;
+        }
+        if (obj.error) throw new Error(obj.error);
+        if (obj.done) return;
+        if (obj.delta) onToken(obj.delta);
+      }
     }
+  } catch (e) {
+    if (isAbort(e)) return;
+    throw e;
   }
 }
+
+// Cancel an in-flight stream server-side so we stop paying for tokens.
+export const stopChat = (sessionId: string, generationId: string) =>
+  request<{ stopped: boolean }>(`/chat/${sessionId}/stop/${generationId}`, {
+    method: "POST",
+  });

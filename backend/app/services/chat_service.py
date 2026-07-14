@@ -32,11 +32,15 @@ def _build_prompt(history: list[dict]) -> list[ChatCompletionMessageParam]:
     )
 
 
-async def stream(tenant_id: ObjectId, sid: ObjectId, content: str):
+async def stream(
+    tenant_id: ObjectId, sid: ObjectId, content: str, usage_out: dict | None = None
+):
     """Save the user turn, stream the reply, and persist it.
 
     The reply is saved in a `finally` block so a mid-stream client disconnect
-    still persists whatever was generated. The caller checks ownership first.
+    (or a stop request) still persists whatever was generated. If `usage_out` is
+    given, the final token counts are copied into it so the route can emit them
+    on the closing SSE event. The caller checks ownership first.
     """
     await message_repo.insert(tenant_id, sid, "user", content)
 
@@ -53,6 +57,8 @@ async def stream(tenant_id: ObjectId, sid: ObjectId, content: str):
             chunks.append(token)
             yield token
     finally:
+        if usage_out is not None:
+            usage_out.update(usage)
         reply = "".join(chunks)
         if reply:
             await message_repo.insert(

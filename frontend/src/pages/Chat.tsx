@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import ChatWindow from "../components/ChatWindow";
 import {
@@ -6,6 +6,7 @@ import {
   deleteSession,
   getMessages,
   listSessions,
+  stopChat,
   streamChat,
 } from "../api";
 import type { Message, Session } from "../types";
@@ -19,6 +20,11 @@ export default function Chat({ onLogout }: ChatProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
+  // The in-flight stream: its abort controller + the session/generation id we
+  // need to cancel it server-side. Refs so the Stop handler always sees the live
+  // values, not a stale render's closure.
+  const abortRef = useRef<AbortController | null>(null);
+  const streamRef = useRef<{ sid: string; genId: string | null } | null>(null);
 
   useEffect(() => {
     refreshSessions();
@@ -49,8 +55,24 @@ export default function Chat({ onLogout }: ChatProps) {
     await refreshSessions();
   }
 
+  // Stop the current stream: abort the fetch (instant UI) and tell the server to
+  // cancel it (works even if a proxy buffers the connection). Best-effort.
+  async function stop() {
+    const info = streamRef.current;
+    abortRef.current?.abort();
+    if (info?.genId) {
+      try {
+        await stopChat(info.sid, info.genId);
+      } catch {
+        /* already finished, or nothing listening */
+      }
+    }
+  }
+
   async function send(text: string) {
     setBusy(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       let sid = activeId;
       if (!sid) {
@@ -58,6 +80,7 @@ export default function Chat({ onLogout }: ChatProps) {
         sid = s.id;
         setActiveId(sid);
       }
+      streamRef.current = { sid, genId: null };
 
       // Optimistically show the user message and an empty assistant bubble.
       setMessages((m) => [
@@ -66,14 +89,24 @@ export default function Chat({ onLogout }: ChatProps) {
         { role: "assistant", content: "" },
       ]);
 
-      await streamChat(sid, text, (delta) => {
-        setMessages((m) => {
-          const copy = [...m];
-          const last = copy[copy.length - 1];
-          copy[copy.length - 1] = { ...last, content: last.content + delta };
-          return copy;
-        });
-      });
+      await streamChat(
+        sid,
+        text,
+        (delta) => {
+          setMessages((m) => {
+            const copy = [...m];
+            const last = copy[copy.length - 1];
+            copy[copy.length - 1] = { ...last, content: last.content + delta };
+            return copy;
+          });
+        },
+        {
+          signal: controller.signal,
+          onGenerationId: (id) => {
+            if (streamRef.current) streamRef.current.genId = id;
+          },
+        },
+      );
 
       await refreshSessions(); // reflect new title / updated order
     } catch (e) {
@@ -92,6 +125,8 @@ export default function Chat({ onLogout }: ChatProps) {
       });
     } finally {
       setBusy(false);
+      abortRef.current = null;
+      streamRef.current = null;
     }
   }
 
@@ -105,7 +140,7 @@ export default function Chat({ onLogout }: ChatProps) {
         onDelete={removeSession}
         onLogout={onLogout}
       />
-      <ChatWindow messages={messages} onSend={send} busy={busy} />
+      <ChatWindow messages={messages} onSend={send} onStop={stop} busy={busy} />
     </div>
   );
 }
