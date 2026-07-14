@@ -1,4 +1,11 @@
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorClientSession,
+    AsyncIOMotorDatabase,
+)
 
 from app.config import settings
 
@@ -18,7 +25,15 @@ async def connect() -> None:
     global _client, _db
     # tz_aware makes Mongo return timezone-aware UTC datetimes, so timestamps
     # serialize consistently (with an offset) instead of naive/ambiguous.
-    _client = AsyncIOMotorClient(settings.mongodb_uri, tz_aware=True)
+    # Pool bounds are tuned per deployment: maxPoolSize caps concurrent sockets
+    # per worker (guarding Atlas connection limits under load); minPoolSize keeps
+    # warm connections so bursts don't pay handshake latency.
+    _client = AsyncIOMotorClient(
+        settings.mongodb_uri,
+        tz_aware=True,
+        maxPoolSize=settings.mongo_max_pool_size,
+        minPoolSize=settings.mongo_min_pool_size,
+    )
     _db = _client[settings.mongodb_db]
     await _client.admin.command("ping")
     await _create_indexes(_db)
@@ -30,8 +45,26 @@ async def close() -> None:
         _client.close()
 
 
+@asynccontextmanager
+async def transaction() -> AsyncIterator[AsyncIOMotorClientSession]:
+    """Run the enclosed writes in one multi-document transaction.
+
+    Yields a client session to pass as `session=` to each write; on a clean exit
+    the transaction commits, on an exception it aborts (all writes roll back).
+    Requires a replica set — Atlas provides one.
+    """
+    if _client is None:
+        raise RuntimeError("Database not initialized. Call connect() on startup.")
+    async with await _client.start_session() as s:
+        async with s.start_transaction():
+            yield s
+
+
 async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
-    """Ensure the indexes our queries rely on exist."""
+    """Ensure the indexes our queries rely on exist.
+
+    See docs/data-model.md for the full index + migration strategy.
+    """
     await db.users.create_index("email", unique=True)
     # Tenant-scoped queries lead with tenant_id, so the indexes do too.
     await db.sessions.create_index(

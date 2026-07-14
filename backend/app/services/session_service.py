@@ -14,6 +14,13 @@ async def list_for_user(tenant_id: ObjectId, user_id: ObjectId) -> list[dict]:
     return await session_repo.list_by_user(tenant_id, user_id)
 
 
+async def page_for_user(
+    tenant_id: ObjectId, user_id: ObjectId, limit: int, after: str | None
+) -> list[dict]:
+    """A keyset page of the user's sessions (over-fetched by one row)."""
+    return await session_repo.page_by_user(tenant_id, user_id, limit, after)
+
+
 async def get_owned(tenant_id: ObjectId, session_id: str, user_id: ObjectId) -> dict:
     """Return the session only if it belongs to this user, else 404.
 

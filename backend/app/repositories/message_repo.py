@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from bson import ObjectId
+from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from app.core.tenant_db import scoped
 
@@ -11,6 +12,7 @@ async def insert(
     role: str,
     content: str,
     metadata: dict | None = None,
+    txn: AsyncIOMotorClientSession | None = None,
 ) -> dict:
     doc = {
         "session_id": session_id,
@@ -19,9 +21,13 @@ async def insert(
         "created_at": datetime.now(UTC),
         "metadata": metadata or {},
     }
-    result = await scoped(tenant_id).messages.insert_one(doc)
+    result = await scoped(tenant_id, txn).messages.insert_one(doc)
     doc["_id"] = result.inserted_id
     return doc
+
+
+async def count_by_session(tenant_id: ObjectId, session_id: ObjectId) -> int:
+    return await scoped(tenant_id).messages.count_documents({"session_id": session_id})
 
 
 async def list_by_session(

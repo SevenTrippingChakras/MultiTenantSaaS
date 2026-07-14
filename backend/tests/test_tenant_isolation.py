@@ -23,7 +23,7 @@ async def test_tenant_cannot_touch_another_tenants_session(client):
 
     # Bob's session list does not include it.
     b_list = await client.get("/sessions", headers=b)
-    assert all(s["id"] != sid for s in b_list.json())
+    assert all(s["id"] != sid for s in b_list.json()["items"])
 
     # Bob cannot read its messages, delete it, or chat into it — all 404.
     assert (await client.get(f"/sessions/{sid}/messages", headers=b)).status_code == 404

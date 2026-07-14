@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     env: str = "dev"
     mongodb_uri: str
     mongodb_db: str = "aichat"
+    mongo_max_pool_size: int = 50
+    mongo_min_pool_size: int = 0
+    soft_delete_retention_days: int = 30
     redis_uri: str = "redis://localhost:6379/0"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
