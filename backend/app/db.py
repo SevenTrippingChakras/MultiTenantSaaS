@@ -73,3 +73,7 @@ async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.messages.create_index(
         [("tenant_id", 1), ("session_id", 1), ("created_at", 1)]
     )
+    # Metering: the aggregation job scans unaggregated events; the dashboard reads
+    # daily summaries per tenant (and per user) newest-first.
+    await db.usage_events.create_index("aggregated")
+    await db.usage_daily.create_index([("tenant_id", 1), ("user_id", 1), ("date", -1)])

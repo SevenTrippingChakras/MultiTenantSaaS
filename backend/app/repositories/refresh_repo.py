@@ -7,6 +7,7 @@ revokes the whole family. A per-user set indexes a user's families so we can
 log out everywhere.
 """
 
+from collections.abc import Awaitable
 from typing import cast
 
 from app.config import settings
@@ -34,7 +35,9 @@ async def set_active_jti(user_id: str, family_id: str, jti: str) -> None:
     r = get_redis()
     ttl = _ttl_seconds()
     await r.set(_family_key(family_id), jti, ex=ttl)
-    await r.sadd(_user_key(user_id), family_id)
+    # redis 5.x async stubs type set-ops as `Awaitable[int] | int`; cast to the
+    # awaitable half so the await type-checks (values are awaited at runtime).
+    await cast("Awaitable[int]", r.sadd(_user_key(user_id), family_id))
     await r.expire(_user_key(user_id), ttl)
 
 
@@ -48,13 +51,13 @@ async def revoke_family(user_id: str, family_id: str) -> None:
     """Revoke a single session (logout, or reuse detection)."""
     r = get_redis()
     await r.delete(_family_key(family_id))
-    await r.srem(_user_key(user_id), family_id)
+    await cast("Awaitable[int]", r.srem(_user_key(user_id), family_id))
 
 
 async def revoke_all(user_id: str) -> None:
     """Revoke every session for a user (log out everywhere)."""
     r = get_redis()
-    families = cast("set[str]", await r.smembers(_user_key(user_id)))
+    families = await cast("Awaitable[set[str]]", r.smembers(_user_key(user_id)))
     keys = [_family_key(f) for f in families]
     if keys:
         await r.delete(*keys)
