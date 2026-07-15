@@ -25,8 +25,8 @@ services:
         condition: service_healthy
 
   worker:
-    # Same image as the backend; runs the ARQ worker instead of the API. It
-    # consumes the metering queue and runs the periodic usage-aggregation cron.
+    # Same image as the backend; runs the ARQ worker instead of the API. It runs
+    # the periodic usage-aggregation cron (raw events are written by the API now).
     build: ./backend
     command: ["arq", "app.worker.WorkerSettings"]
     env_file:

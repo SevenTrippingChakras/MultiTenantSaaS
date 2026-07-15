@@ -1,15 +1,14 @@
-"""Metering worker jobs — the off-hot-path half of usage tracking (arch B2).
+"""Metering aggregation job — the off-hot-path half of usage tracking (arch B2).
 
-Two jobs, run by the ARQ worker (`app/worker.py`):
+`aggregate_usage` is a periodic cron job (run by `app/worker.py`) that rolls
+unaggregated raw `usage_events` into per tenant/user/day/model rows in
+`usage_daily`, then marks them aggregated. The raw events are written durably on
+the request path (see `app/services/metering.py`), so this job only reads and
+folds them; there is no Redis queue in the durable path. Summaries are what the
+dashboard and admin views query; raw events are audit detail a later purge can
+trim.
 
-- `store_usage_event` — enqueued per LLM call; persists the raw event to the
-  `usage_events` collection (marked unaggregated).
-- `aggregate_usage` — a periodic cron job that rolls unaggregated raw events into
-  per tenant/user/day/model rows in `usage_daily`, then marks them aggregated.
-  Summaries are what the dashboard and admin views query; raw events are audit
-  detail a later purge can trim.
-
-These run cross-tenant on the raw `get_db()` collections (like the purge job);
+Runs cross-tenant on the raw `get_db()` collections (like the purge job);
 `tenant_id`/`user_id` are stored as the strings the metering emitter sends.
 """
 
@@ -26,13 +25,6 @@ logger = logging.getLogger("aichat")
 AGG_BATCH = 1000
 
 _SUM_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
-
-
-async def store_usage_event(ctx: dict, event: dict) -> str:
-    """Persist one raw usage event for later aggregation."""
-    doc = {**event, "aggregated": False}
-    result = await db.get_db().usage_events.insert_one(doc)
-    return str(result.inserted_id)
 
 
 def _day(ts: str) -> str:

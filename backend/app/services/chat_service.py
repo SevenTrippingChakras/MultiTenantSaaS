@@ -73,9 +73,24 @@ async def stream(
         if usage_out is not None:
             usage_out.update(usage)
         reply = "".join(chunks)
+        # Meter the tokens spent, even on a partial (stopped) reply. The usage
+        # event is written durably in Mongo, atomic with the assistant reply, so
+        # a committed reply can never lose its billable event.
+        event = None
+        if usage.get("total_tokens"):
+            event = metering.build_event(
+                tenant_id=str(tenant_id),
+                user_id=str(user_id),
+                session_id=str(sid),
+                model=settings.openai_model,
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+            )
+
         if reply:
-            # Assistant reply + session bump go together so the list never shows
-            # a session touched newer than its last stored message.
+            # Assistant reply + session bump + usage event go together so the list
+            # never shows a session touched newer than its last stored message,
+            # and the reply and its usage event commit or roll back as one.
             async with db.transaction() as txn:
                 await message_repo.insert(
                     tenant_id,
@@ -86,17 +101,18 @@ async def stream(
                     txn=txn,
                 )
                 await session_repo.touch(tenant_id, sid, txn=txn)
-        # Meter the tokens spent, even on a partial (stopped) reply. Best-effort:
-        # a metering failure must never lose the assistant message above.
-        if usage.get("total_tokens"):
+                if event:
+                    await metering.store_event(event, txn=txn)
+        elif event:
+            # Tokens spent but no reply to co-write with (e.g. stopped before any
+            # text): still persist the event durably on its own.
+            async with db.transaction() as txn:
+                await metering.store_event(event, txn=txn)
+
+        # Best-effort month-to-date cache: a failure here must never disturb the
+        # durable event written above.
+        if event:
             try:
-                await metering.record_usage(
-                    tenant_id=str(tenant_id),
-                    user_id=str(user_id),
-                    session_id=str(sid),
-                    model=settings.openai_model,
-                    prompt_tokens=usage.get("prompt_tokens", 0),
-                    completion_tokens=usage.get("completion_tokens", 0),
-                )
+                await metering.bump_counters(event)
             except Exception:
-                logger.exception("metering failed for session %s", sid)
+                logger.exception("metering counter update failed for session %s", sid)

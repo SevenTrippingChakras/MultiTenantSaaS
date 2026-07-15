@@ -55,3 +55,9 @@ async def test_prompt_is_shaped_and_usage_persisted(client, monkeypatch):
     assistant = await settings_db.messages.find_one({"role": "assistant"})
     assert assistant["content"] == "Hello world"
     assert assistant["metadata"]["usage"] == FAKE_USAGE
+
+    # Durability: a raw usage event is written (unaggregated) atomically with the
+    # reply, so a later bill can enforce on it without a Redis hop.
+    event = await settings_db.usage_events.find_one({"session_id": sid})
+    assert event["total_tokens"] == FAKE_USAGE["total_tokens"]
+    assert event["aggregated"] is False

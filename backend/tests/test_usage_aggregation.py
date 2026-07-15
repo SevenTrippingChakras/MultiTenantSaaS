@@ -6,29 +6,33 @@ Calls the ARQ job functions directly (no worker process) against the test DB.
 from uuid import uuid4
 
 from app import db
-from app.jobs.usage import aggregate_usage, store_usage_event
+from app.jobs.usage import aggregate_usage
 
 
-def _event(tid, uid, pt, ct, ts):
-    return {
-        "tenant_id": tid,
-        "user_id": uid,
-        "session_id": "S1",
-        "model": "gpt-4o-mini",
-        "prompt_tokens": pt,
-        "completion_tokens": ct,
-        "total_tokens": pt + ct,
-        "cost_usd": 0.001,
-        "ts": ts,
-    }
+async def _seed(tid, uid, pt, ct, ts):
+    """Insert one unaggregated raw event, as the request path would."""
+    await db.get_db().usage_events.insert_one(
+        {
+            "tenant_id": tid,
+            "user_id": uid,
+            "session_id": "S1",
+            "model": "gpt-4o-mini",
+            "prompt_tokens": pt,
+            "completion_tokens": ct,
+            "total_tokens": pt + ct,
+            "cost_usd": 0.001,
+            "ts": ts,
+            "aggregated": False,
+        }
+    )
 
 
 async def test_aggregate_rolls_events_into_daily(client):
     tid, uid = uuid4().hex, uuid4().hex
     # Two events same day -> one summary; a third on the next day -> another.
-    await store_usage_event({}, _event(tid, uid, 100, 50, "2026-07-15T10:00:00+00:00"))
-    await store_usage_event({}, _event(tid, uid, 200, 80, "2026-07-15T18:00:00+00:00"))
-    await store_usage_event({}, _event(tid, uid, 10, 5, "2026-07-16T09:00:00+00:00"))
+    await _seed(tid, uid, 100, 50, "2026-07-15T10:00:00+00:00")
+    await _seed(tid, uid, 200, 80, "2026-07-15T18:00:00+00:00")
+    await _seed(tid, uid, 10, 5, "2026-07-16T09:00:00+00:00")
 
     result = await aggregate_usage({})
     assert result == {"events": 3, "summaries": 2}
@@ -42,7 +46,7 @@ async def test_aggregate_rolls_events_into_daily(client):
 
 async def test_aggregate_is_idempotent(client):
     tid, uid = uuid4().hex, uuid4().hex
-    await store_usage_event({}, _event(tid, uid, 100, 50, "2026-07-15T10:00:00+00:00"))
+    await _seed(tid, uid, 100, 50, "2026-07-15T10:00:00+00:00")
     await aggregate_usage({})
 
     # A second pass finds nothing new (events already marked aggregated) and does
