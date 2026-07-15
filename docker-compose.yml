@@ -24,6 +24,19 @@ services:
       redis:
         condition: service_healthy
 
+  worker:
+    # Same image as the backend; runs the ARQ worker instead of the API. It
+    # consumes the metering queue and runs the periodic usage-aggregation cron.
+    build: ./backend
+    command: ["arq", "app.worker.WorkerSettings"]
+    env_file:
+      - ./backend/.env
+    environment:
+      REDIS_URI: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend

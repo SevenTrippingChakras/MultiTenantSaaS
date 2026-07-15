@@ -49,7 +49,7 @@ async def send_message(
         yield _event({"generation_id": generation_id})
         try:
             async for token in chat_service.stream(
-                tenant_id, sid, data.content, usage_out=usage
+                tenant_id, user["_id"], sid, data.content, usage_out=usage
             ):
                 yield _event({"delta": token})
             yield _event({"done": True, "usage": usage})

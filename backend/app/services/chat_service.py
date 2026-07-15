@@ -1,3 +1,4 @@
+import logging
 from typing import cast
 
 from bson import ObjectId
@@ -6,6 +7,9 @@ from openai.types.chat import ChatCompletionMessageParam
 from app import db, llm, token_budget
 from app.config import settings
 from app.repositories import message_repo, session_repo
+from app.services import metering
+
+logger = logging.getLogger("aichat")
 
 TITLE_MAX_LEN = 50
 
@@ -33,7 +37,11 @@ def _build_prompt(history: list[dict]) -> list[ChatCompletionMessageParam]:
 
 
 async def stream(
-    tenant_id: ObjectId, sid: ObjectId, content: str, usage_out: dict | None = None
+    tenant_id: ObjectId,
+    user_id: ObjectId,
+    sid: ObjectId,
+    content: str,
+    usage_out: dict | None = None,
 ):
     """Save the user turn, stream the reply, and persist it.
 
@@ -78,3 +86,17 @@ async def stream(
                     txn=txn,
                 )
                 await session_repo.touch(tenant_id, sid, txn=txn)
+        # Meter the tokens spent, even on a partial (stopped) reply. Best-effort:
+        # a metering failure must never lose the assistant message above.
+        if usage.get("total_tokens"):
+            try:
+                await metering.record_usage(
+                    tenant_id=str(tenant_id),
+                    user_id=str(user_id),
+                    session_id=str(sid),
+                    model=settings.openai_model,
+                    prompt_tokens=usage.get("prompt_tokens", 0),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                )
+            except Exception:
+                logger.exception("metering failed for session %s", sid)

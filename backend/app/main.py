@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import db, redis_client
+from app import db, redis_client, task_queue
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.core.rate_limit import register_rate_limiting
-from app.routes import auth, chat, sessions
+from app.routes import auth, chat, sessions, usage
 
 configure_logging(settings.log_level)
 logger = logging.getLogger("aichat")
@@ -24,10 +24,13 @@ async def lifespan(app: FastAPI):
     logger.info("Connected to MongoDB Atlas (db=%s)", db.get_db().name)
     await redis_client.connect()
     logger.info("Connected to Redis")
+    await task_queue.connect()
+    logger.info("Connected to ARQ task queue")
     yield
+    await task_queue.close()
     await redis_client.close()
     await db.close()
-    logger.info("MongoDB and Redis connections closed")
+    logger.info("MongoDB, Redis, and task-queue connections closed")
 
 
 app = FastAPI(title="AIchat API", lifespan=lifespan)
@@ -51,6 +54,7 @@ app.add_middleware(RequestContextMiddleware)
 app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(chat.router)
+app.include_router(usage.router)
 
 register_error_handlers(app)
 
