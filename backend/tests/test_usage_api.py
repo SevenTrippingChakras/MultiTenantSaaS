@@ -8,7 +8,7 @@ the daily summaries the worker rolls up. Seeds both through the same code paths
 from bson import ObjectId
 
 from app import db
-from app.jobs.usage import aggregate_usage, store_usage_event
+from app.jobs.usage import aggregate_usage
 from app.services import metering
 
 
@@ -31,7 +31,9 @@ async def test_usage_returns_month_to_date_and_daily(client):
     tenant_id = str(user["tenant_id"])
 
     # Live counters (month-to-date).
-    await metering.record_usage(tenant_id, user_id, "S1", "gpt-4o-mini", 1000, 500)
+    await metering.bump_counters(
+        metering.build_event(tenant_id, user_id, "S1", "gpt-4o-mini", 1000, 500)
+    )
     # A raw event aggregated into a daily summary.
     period = metering.period_key()
     event = {
@@ -44,8 +46,9 @@ async def test_usage_returns_month_to_date_and_daily(client):
         "total_tokens": 1500,
         "cost_usd": 0.00045,
         "ts": f"{period[:4]}-{period[4:]}-01T10:00:00+00:00",
+        "aggregated": False,
     }
-    await store_usage_event({}, event)
+    await metering.store_event(event)
     await aggregate_usage({})
 
     resp = await client.get("/usage", headers=headers)

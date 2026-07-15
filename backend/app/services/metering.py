@@ -1,23 +1,28 @@
-"""Metering emit — the hot-path half of usage tracking (arch B2).
+"""Metering emit — usage tracking on the request path (arch B2).
 
-On every LLM call we do two cheap things and nothing slow:
+Durability lives in Mongo, not Redis. Each LLM call produces a raw **usage
+event** that is written to the `usage_events` collection in the same transaction
+as the assistant reply (see `chat_service.stream`), marked `aggregated: false`.
+That transactional-outbox write is the source of truth a later bill enforces on;
+the periodic `aggregate_usage` job rolls unaggregated events into `usage_daily`
+summaries off the hot path (see `app/jobs/usage.py`).
 
-1. Increment **Redis counters** for the current billing month, per tenant and
-   per user. These are the real-time balance a quota check or dashboard reads
-   without touching Mongo.
-2. Enqueue the **raw usage event** onto the ARQ queue. A worker persists it and a
-   periodic job rolls the raw events into `usage_daily` summaries off the hot
-   path (see `app/jobs/usage.py`).
+The **Redis month-to-date counters** are a best-effort cache of that same data,
+bumped after the durable write commits. A quota check or dashboard reads them for
+a real-time balance; if they drift or are lost they are rebuildable by summing
+this month's `usage_daily`.
 
-Cost is derived here (per-model pricing) and stored alongside tokens so history
-stays accurate when prices change.
+Cost is derived here (per-model pricing) and stored on the event so history stays
+accurate when prices change.
 """
 
 from collections.abc import Awaitable
 from datetime import UTC, datetime
 from typing import cast
 
-from app import pricing, task_queue
+from motor.motor_asyncio import AsyncIOMotorClientSession
+
+from app import db, pricing
 from app.redis_client import get_redis
 
 # Counters live a little past the month so the current balance is always present
@@ -53,23 +58,17 @@ async def read_counter(scope: str, scope_id: str, period: str | None = None) -> 
     }
 
 
-async def record_usage(
+def build_event(
     tenant_id: str,
     user_id: str,
     session_id: str,
     model: str,
     prompt_tokens: int,
     completion_tokens: int,
-) -> None:
-    """Meter one LLM call: bump live counters and enqueue the raw event."""
+) -> dict:
+    """Build one raw usage event: cost derived, marked unaggregated."""
     total_tokens = prompt_tokens + completion_tokens
-    cost = pricing.cost_usd(model, prompt_tokens, completion_tokens)
-    period = period_key()
-
-    await _incr_counter(_counter_key("tenant", tenant_id, period), total_tokens, cost)
-    await _incr_counter(_counter_key("user", user_id, period), total_tokens, cost)
-
-    event = {
+    return {
         "tenant_id": tenant_id,
         "user_id": user_id,
         "session_id": session_id,
@@ -77,7 +76,33 @@ async def record_usage(
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
-        "cost_usd": cost,
+        "cost_usd": pricing.cost_usd(model, prompt_tokens, completion_tokens),
         "ts": datetime.now(UTC).isoformat(),
+        "aggregated": False,
     }
-    await task_queue.get_pool().enqueue_job("store_usage_event", event)
+
+
+async def store_event(
+    event: dict, txn: AsyncIOMotorClientSession | None = None
+) -> None:
+    """Persist a raw usage event durably, optionally within a transaction.
+
+    Stored on the raw `get_db()` collection (cross-tenant, `tenant_id`/`user_id`
+    as strings) that `aggregate_usage` scans. Passing `txn` makes the write atomic
+    with the assistant reply so a committed reply can never lose its usage event.
+    """
+    await db.get_db().usage_events.insert_one(event, session=txn)
+
+
+async def bump_counters(event: dict) -> None:
+    """Best-effort: fold one usage event into the month-to-date Redis cache.
+
+    A cache rebuildable from `usage_daily`, so a failure here is tolerable and the
+    caller keeps it off the durable path.
+    """
+    period = period_key()
+    tokens, cost = event["total_tokens"], event["cost_usd"]
+    tenant_key = _counter_key("tenant", event["tenant_id"], period)
+    user_key = _counter_key("user", event["user_id"], period)
+    await _incr_counter(tenant_key, tokens, cost)
+    await _incr_counter(user_key, tokens, cost)

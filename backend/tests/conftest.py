@@ -1,7 +1,7 @@
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app import db, redis_client, task_queue
+from app import db, redis_client
 from app.config import settings
 from app.core.rate_limit import limiter
 from app.main import app
@@ -28,7 +28,6 @@ async def client():
     # creates for it (avoids "attached to a different loop" errors).
     await db.connect()
     await redis_client.connect()
-    await task_queue.connect()
     for name in _COLLECTIONS:
         await db.get_db()[name].delete_many({})
 
@@ -36,6 +35,5 @@ async def client():
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
-    await task_queue.close()
     await redis_client.close()
     await db.close()
