@@ -1,12 +1,14 @@
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app import plans
 from app.core import security
-from app.core.errors import InvalidToken
+from app.core.errors import FeatureNotAvailable, InvalidToken
 from app.core.logging import tenant_id_ctx, user_id_ctx
-from app.repositories import user_repo
+from app.repositories import tenant_repo, user_repo
 
 bearer = HTTPBearer()
 
@@ -28,3 +30,19 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+
+def require_feature(feature: str) -> Callable[[dict], Awaitable[dict]]:
+    """Dependency factory: allow only tenants whose plan includes `feature`.
+
+    Returns the user (like `get_current_user`) so a gated route can depend on
+    this instead of `CurrentUser` and still read `user`. 403 otherwise.
+    """
+
+    async def _dep(user: CurrentUser) -> dict:
+        plan = await tenant_repo.get_plan(user["tenant_id"])
+        if not plans.has_feature(plan, feature):
+            raise FeatureNotAvailable
+        return user
+
+    return _dep

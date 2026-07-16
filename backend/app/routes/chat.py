@@ -13,7 +13,7 @@ from app.core.rate_limit import chat_limit, limiter
 from app.core.streaming import with_heartbeat
 from app.models.message import MessageCreate
 from app.repositories import stop_signal
-from app.services import chat_service, session_service
+from app.services import chat_service, quota_service, session_service
 
 logger = logging.getLogger("aichat")
 
@@ -34,6 +34,9 @@ async def send_message(
     tenant_id = user["tenant_id"]
     session = await session_service.get_owned(tenant_id, session_id, user["_id"])
     sid = session["_id"]
+
+    # Enforce the plan quota before spending any tokens (402 if over allowance).
+    await quota_service.check(tenant_id)
 
     # A per-stream id the client echoes back to POST /chat/{sid}/stop/{gen_id}.
     generation_id = uuid4().hex

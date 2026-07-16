@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     default_rate_limit: str = "200/minute"
     auth_rate_limit: str = "10/minute"
     chat_rate_limit: str = "30/minute"
+    # Stripe (test mode by default: empty keys disable billing calls). Price ids
+    # map a Stripe recurring price to a plan; set them per env from the dashboard.
+    stripe_api_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_pro: str = ""
+    stripe_price_enterprise: str = ""
+    checkout_success_url: str = "http://localhost:5173/billing/success"
+    checkout_cancel_url: str = "http://localhost:5173/billing/cancel"
 
     @property
     def cookie_secure(self) -> bool:

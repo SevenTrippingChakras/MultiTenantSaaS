@@ -11,7 +11,7 @@ from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.core.rate_limit import register_rate_limiting
-from app.routes import auth, chat, sessions, usage
+from app.routes import auth, billing, chat, plans, sessions, usage
 
 configure_logging(settings.log_level)
 logger = logging.getLogger("aichat")
@@ -52,6 +52,8 @@ app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(chat.router)
 app.include_router(usage.router)
+app.include_router(plans.router)
+app.include_router(billing.router)
 
 register_error_handlers(app)
 

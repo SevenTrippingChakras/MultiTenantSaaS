@@ -50,6 +50,24 @@ class CsrfError(AppError):
     message = "CSRF validation failed"
 
 
+class QuotaExceeded(AppError):
+    status_code = 402
+    code = "quota_exceeded"
+    message = "Monthly token quota exceeded for your plan"
+
+
+class FeatureNotAvailable(AppError):
+    status_code = 403
+    code = "feature_not_available"
+    message = "Your plan does not include this feature"
+
+
+class BillingError(AppError):
+    status_code = 400
+    code = "billing_error"
+    message = "Billing request could not be processed"
+
+
 def error_response(
     status_code: int,
     code: str,
