@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     cookie_domain: str | None = None
     log_level: str = "INFO"
     max_message_chars: int = 16000
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:8000/billing/checkout",
+        "http://localhost:5173/billing/cancel",
+    ]
     rate_limit_enabled: bool = True
     default_rate_limit: str = "200/minute"
     auth_rate_limit: str = "10/minute"

@@ -1,6 +1,7 @@
 import {
   createSession as createSessionApi,
   deleteSession as deleteSessionApi,
+  exportSession as exportSessionApi,
   getMessages,
   listSessions,
   stopChat as stopChatApi,
@@ -58,4 +59,30 @@ export async function loadOlderMessages(
 // --- Chat control ---
 export async function stopChat(sessionId: string, generationId: string): Promise<void> {
   await stopChatApi(sessionId, generationId);
+}
+
+// --- Export (feature-gated) ---
+
+function fileSlug(title: string): string {
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "session"
+  );
+}
+
+// Fetch a session's transcript and save it as a JSON file. Throws (propagating
+// the backend's message, e.g. a 403 on a plan without the export feature) so the
+// caller can surface it.
+export async function downloadSessionExport(id: string, title: string): Promise<void> {
+  const { data } = await exportSessionApi(id);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${fileSlug(title)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
