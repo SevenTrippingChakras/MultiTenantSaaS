@@ -48,6 +48,35 @@ docker compose up --build
 - API:     http://localhost:8000
 - Stop:    `docker compose down`
 
+## Stripe billing (test mode — free)
+
+Optional. Leave the Stripe vars in `backend/.env` blank and billing is off (the
+API rejects checkout/webhook). To enable it, use Stripe **test mode** (a sandbox —
+free, no real charges, no account activation needed).
+
+1. **Keys & prices** (Stripe dashboard, sandbox):
+   - `STRIPE_API_KEY` — Developers -> API keys -> **Secret key** (`sk_test_...`).
+   - Create two **recurring / monthly** products (Pro, Enterprise). Open each,
+     copy its **price** id (`price_...`, *not* the `prod_...` product id) into
+     `STRIPE_PRICE_PRO` / `STRIPE_PRICE_ENTERPRISE`.
+
+2. **Webhook** (so a paid checkout auto-upgrades the plan) — the CLI tunnels
+   Stripe's events to localhost:
+
+   ```bash
+   brew install stripe/stripe-cli/stripe          # once
+   stripe login                                    # opens browser, click Allow
+   stripe listen --forward-to localhost:8000/billing/webhook
+   ```
+
+   `stripe listen` prints `whsec_...` — put it in `STRIPE_WEBHOOK_SECRET`, then
+   **restart the backend** (settings load at startup). Keep `stripe listen`
+   running while testing.
+
+3. **Test the loop**: in the app, Usage & billing -> **Upgrade**, pay with test
+   card `4242 4242 4242 4242` (any future expiry/CVC). The `customer.subscription.*`
+   webhook flips the tenant's plan; reopen the panel to see it.
+
 ## Notes
 
 - API docs (Swagger): http://localhost:8000/docs

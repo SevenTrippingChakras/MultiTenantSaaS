@@ -55,22 +55,28 @@ async def create_checkout(tenant: dict, email: str, plan_name: str) -> str:
         raise BillingError(f"No purchasable price for plan '{plan_name}'")
 
     tenant_id = tenant["_id"]
-    customer_id = tenant.get("stripe_customer_id")
-    if not customer_id:
-        customer = stripe.Customer.create(
-            email=email, metadata={"tenant_id": str(tenant_id)}
-        )
-        customer_id = customer.id
-        await tenant_repo.set_stripe_customer(tenant_id, customer_id)
+    try:
+        customer_id = tenant.get("stripe_customer_id")
+        if not customer_id:
+            customer = stripe.Customer.create(
+                email=email, metadata={"tenant_id": str(tenant_id)}
+            )
+            customer_id = customer.id
+            await tenant_repo.set_stripe_customer(tenant_id, customer_id)
 
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer=customer_id,
-        line_items=[{"price": price_id, "quantity": 1}],
-        client_reference_id=str(tenant_id),
-        success_url=settings.checkout_success_url,
-        cancel_url=settings.checkout_cancel_url,
-    )
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=customer_id,
+            line_items=[{"price": price_id, "quantity": 1}],
+            client_reference_id=str(tenant_id),
+            success_url=settings.checkout_success_url,
+            cancel_url=settings.checkout_cancel_url,
+        )
+    except stripe.StripeError as e:
+        # Surface Stripe's own message as a clean 400 (e.g. a wrong price id) so
+        # the client sees it, instead of an unhandled 500 that also loses CORS.
+        raise BillingError(f"Stripe checkout failed: {e.user_message or e}") from e
+
     if not session.url:
         raise BillingError("Stripe did not return a checkout URL")
     return session.url

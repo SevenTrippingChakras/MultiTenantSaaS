@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import ChatWindow from "../components/ChatWindow";
+import UsagePanel from "../components/UsagePanel";
 import { streamChat } from "../api";
 import {
   createSession,
   deleteSession,
+  downloadSessionExport,
   loadInitialSessions,
   loadLatestMessages,
   loadMoreSessions,
@@ -24,12 +26,16 @@ export default function Chat({ onLogout }: ChatProps) {
   const [loadingMoreSessions, setLoadingMoreSessions] = useState(false);
   const [moreSessionsError, setMoreSessionsError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Which view fills the main pane: the chat, or the usage & billing panel.
+  const [view, setView] = useState<"chat" | "usage">("chat");
   const [messages, setMessages] = useState<Message[]>([]);
   // Cursor to the next older page of history (null when none remain).
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A transient toast (export result, feature-gate 403, etc.).
+  const [notice, setNotice] = useState<string | null>(null);
   // The in-flight stream: its abort controller + the session/generation id we
   // need to cancel it server-side. Refs so the Stop handler always sees the live
   // values, not a stale render's closure.
@@ -39,6 +45,25 @@ export default function Chat({ onLogout }: ChatProps) {
   useEffect(() => {
     refreshSessions();
   }, []);
+
+  // Auto-dismiss the toast a few seconds after it appears.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  // Export a session's transcript to a JSON file. A plan without the export
+  // feature returns 403, whose message we surface in the toast.
+  async function exportSession(id: string) {
+    const title = sessions.find((s) => s.id === id)?.title ?? "session";
+    try {
+      await downloadSessionExport(id, title);
+      setNotice("Transcript downloaded.");
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Export failed");
+    }
+  }
 
   async function refreshSessions() {
     const { sessions, cursor } = await loadInitialSessions();
@@ -63,6 +88,7 @@ export default function Chat({ onLogout }: ChatProps) {
   }
 
   async function selectSession(id: string) {
+    setView("chat");
     setActiveId(id);
     setOlderError(null);
     const { messages, cursor } = await loadLatestMessages(id);
@@ -89,6 +115,7 @@ export default function Chat({ onLogout }: ChatProps) {
   // New chat clears the view; the session is created on the first message
   // (so we never leave empty sessions lying around), mirroring ChatGPT.
   function newChat() {
+    setView("chat");
     setActiveId(null);
     setMessages([]);
     setCursor(null);
@@ -188,22 +215,33 @@ export default function Chat({ onLogout }: ChatProps) {
         onSelect={selectSession}
         onNew={newChat}
         onDelete={removeSession}
+        onExport={exportSession}
+        onUsage={() => setView("usage")}
         onLogout={onLogout}
         hasMore={sessionsCursor !== null}
         loadingMore={loadingMoreSessions}
         moreError={moreSessionsError}
         onLoadMore={loadMore}
       />
-      <ChatWindow
-        messages={messages}
-        onSend={send}
-        onStop={stop}
-        busy={busy}
-        hasOlder={cursor !== null}
-        loadingOlder={loadingOlder}
-        olderError={olderError}
-        onLoadOlder={loadOlder}
-      />
+      {view === "usage" ? (
+        <UsagePanel onClose={() => setView("chat")} />
+      ) : (
+        <ChatWindow
+          messages={messages}
+          onSend={send}
+          onStop={stop}
+          busy={busy}
+          hasOlder={cursor !== null}
+          loadingOlder={loadingOlder}
+          olderError={olderError}
+          onLoadOlder={loadOlder}
+        />
+      )}
+      {notice && (
+        <div className="glass fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-white/15 px-4 py-2.5 text-sm shadow-xl">
+          {notice}
+        </div>
+      )}
     </div>
   );
 }

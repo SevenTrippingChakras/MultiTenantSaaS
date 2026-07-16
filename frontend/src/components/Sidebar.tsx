@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
+  Download,
   Flame,
+  Gauge,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -16,6 +18,8 @@ interface SidebarProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  onExport: (id: string) => void;
+  onUsage: () => void;
   onLogout: () => void;
   hasMore: boolean;
   loadingMore: boolean;
@@ -29,6 +33,8 @@ export default function Sidebar({
   onSelect,
   onNew,
   onDelete,
+  onExport,
+  onUsage,
   onLogout,
   hasMore,
   loadingMore,
@@ -104,6 +110,16 @@ export default function Sidebar({
                     />
                     <span className="flex-1 truncate">{s.title}</span>
                     <button
+                      title="Export transcript"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onExport(s.id);
+                      }}
+                      className="shrink-0 text-muted-foreground opacity-0 transition hover:text-moss group-hover:opacity-100"
+                    >
+                      <Download className="size-4" />
+                    </button>
+                    <button
                       title="Delete"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -133,6 +149,15 @@ export default function Sidebar({
         </>
       )}
       {collapsed && <div className="flex-1" />}
+
+      <button
+        onClick={onUsage}
+        title="Usage & billing"
+        className="flex items-center justify-center gap-2 rounded-lg border border-transparent py-2 text-sm font-medium text-muted-foreground transition hover:border-white/10 hover:text-foreground"
+      >
+        <Gauge className="size-4" />
+        {!collapsed && "Usage & billing"}
+      </button>
 
       <button
         onClick={onLogout}

@@ -1,7 +1,17 @@
 import axios, { type AxiosError, type AxiosResponse } from "axios";
 import { API_URL, MESSAGE_PAGE_SIZE, SESSION_PAGE_SIZE } from "./config";
 import { clearToken, getToken, setToken } from "./token";
-import type { Message, Page, Session, TokenResponse, User } from "./types";
+import type {
+  CheckoutResponse,
+  ExportResponse,
+  Message,
+  Page,
+  PlansResponse,
+  Session,
+  TokenResponse,
+  UsageResponse,
+  User,
+} from "./types";
 
 // Per-request flags we read back in the interceptors.
 declare module "axios" {
@@ -249,5 +259,41 @@ export function stopChat(
   return api.request<{ stopped: boolean }>({
     method: "POST",
     url: `/chat/${sessionId}/stop/${generationId}`,
+  });
+}
+
+// --- Usage & billing (Phase 10/11) ---
+
+// Plan quota, month-to-date balance, and recent daily usage for the signed-in user.
+export function getUsage(limit = 30): Promise<AxiosResponse<UsageResponse>> {
+  return api.request<UsageResponse>({
+    method: "GET",
+    url: "/usage",
+    params: { limit },
+  });
+}
+
+// The public plan catalog (unauthenticated on the backend, but harmless to send auth).
+export function getPlans(): Promise<AxiosResponse<PlansResponse>> {
+  return api.request<PlansResponse>({
+    method: "GET",
+    url: "/plans",
+  });
+}
+
+// Start a Stripe Checkout for a paid plan; returns the redirect URL.
+export function createCheckout(plan: string): Promise<AxiosResponse<CheckoutResponse>> {
+  return api.request<CheckoutResponse>({
+    method: "POST",
+    url: "/billing/checkout",
+    data: { plan },
+  });
+}
+
+// Export a session's full transcript (gated by the plan's `export` feature; 403 otherwise).
+export function exportSession(id: string): Promise<AxiosResponse<ExportResponse>> {
+  return api.request<ExportResponse>({
+    method: "GET",
+    url: `/sessions/${id}/export`,
   });
 }
