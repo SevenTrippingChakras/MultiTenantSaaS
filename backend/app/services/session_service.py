@@ -1,6 +1,7 @@
 from bson import ObjectId
 
 from app.core.errors import SessionNotFound
+from app.models.message import to_out as message_to_out
 from app.repositories import message_repo, session_repo
 
 DEFAULT_TITLE = "New chat"
@@ -37,6 +38,25 @@ async def get_owned(tenant_id: ObjectId, session_id: str, user_id: ObjectId) -> 
 async def delete(tenant_id: ObjectId, session_id: str, user_id: ObjectId) -> None:
     await get_owned(tenant_id, session_id, user_id)
     await session_repo.delete(tenant_id, session_id)
+
+
+async def export(tenant_id: ObjectId, session_id: str, user_id: ObjectId) -> dict:
+    """The session's full transcript as a JSON document (plan feature: export).
+
+    Only if the user owns the session. Not paginated — an export is the whole
+    conversation in chronological order.
+    """
+    session = await get_owned(tenant_id, session_id, user_id)
+    messages = await message_repo.list_by_session(tenant_id, session["_id"])
+    return {
+        "session": {
+            "id": str(session["_id"]),
+            "title": session["title"],
+            "created_at": session["created_at"],
+            "updated_at": session["updated_at"],
+        },
+        "messages": [message_to_out(m) for m in messages],
+    }
 
 
 async def page_messages(

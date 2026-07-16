@@ -77,3 +77,6 @@ async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
     # daily summaries per tenant (and per user) newest-first.
     await db.usage_events.create_index("aggregated")
     await db.usage_daily.create_index([("tenant_id", 1), ("user_id", 1), ("date", -1)])
+    # Stripe webhooks look a tenant up by its customer id; sparse since only
+    # paying tenants have one.
+    await db.tenants.create_index("stripe_customer_id", sparse=True)

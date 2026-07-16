@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Query, status
+from typing import Annotated
 
-from app.core.deps import CurrentUser
+from fastapi import APIRouter, Depends, Query, status
+
+from app.core.deps import CurrentUser, require_feature
 from app.core.pagination import (
     DEFAULT_LIMIT,
     Page,
@@ -57,6 +59,15 @@ async def get_messages(
         user["tenant_id"], session_id, user["_id"], limit, before
     )
     return build_page_desc(docs, limit, message_to_out)
+
+
+@router.get("/{session_id}/export")
+async def export_session(
+    session_id: str,
+    user: Annotated[dict, Depends(require_feature("export"))],
+):
+    """Export the full transcript (gated by the plan's `export` feature; 403 if not)."""
+    return await session_service.export(user["tenant_id"], session_id, user["_id"])
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
